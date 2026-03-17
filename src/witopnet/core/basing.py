@@ -28,6 +28,7 @@ class Baser(dbing.LMDBer):
         - ``cids``: controller-AID-to-witness-AID index
         - ``codes``: encrypted TOTP codes keyed by (controller AID, witness AID)
     """
+
     TailDirPath = "keri/witopnet"
     AltTailDirPath = ".keri/witopnet"
     TempPrefix = "keri_witopnet_"

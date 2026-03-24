@@ -21,8 +21,8 @@ from keri.app.httping import (
 from keri.core import coring, serdering
 from keri.help import helping
 
-from witopnet.app import aiding, indirecting
-from witopnet.core import basing, witnessing
+from witopnet.app import ReceiptEnd, loadEnds
+from witopnet.core import Baser, Witnessery, WitnessCollectionEnd
 
 
 def test_encrypting_totp(multipart):
@@ -58,17 +58,17 @@ def test_encrypting_totp(multipart):
         limit = 1.0
         doist = doing.Doist(limit=limit, tock=tock, real=True)
 
-        safe = basing.Baser(name=wanHab.name, temp=wanHab.temp)
-        witery = witnessing.Witnessery(db=safe, temp=wanHab.temp)
+        safe = Baser(name=wanHab.name, temp=wanHab.temp)
+        witery = Witnessery(db=safe, temp=wanHab.temp)
         deeds = doist.enter(doers=[witery])
         doist.recur(deeds=deeds)
 
         app = falcon.App()
-        witColEnd = witnessing.WitnessCollectionEnd(witery)
+        witColEnd = WitnessCollectionEnd(witery)
         app.add_route("/witnesses", witColEnd)
 
-        aiding.loadEnds(app=app, witery=witery)
-        receiptEnd = indirecting.ReceiptEnd(witery=witery, aids=[bobHab.pre])
+        loadEnds(app=app, witery=witery)
+        receiptEnd = ReceiptEnd(witery=witery, aids=[bobHab.pre])
         app.add_route("/receipts", receiptEnd)
 
         client = testing.TestClient(app)

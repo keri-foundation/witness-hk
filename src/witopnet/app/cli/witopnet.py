@@ -6,11 +6,11 @@ witopnet.app.cli module
 
 import multicommand
 from hio.base import doing
-from keri import help
+from hio.help import ogler
 
 from witopnet.app.cli import commands
 
-logger = help.ogler.getLogger()
+logger = ogler.getLogger()
 
 
 def main():

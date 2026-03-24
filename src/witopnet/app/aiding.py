@@ -5,9 +5,10 @@ from urllib.parse import urlparse
 import falcon.errors
 import pyotp
 from falcon.media.multipart import MultipartParseError
-from keri import kering, core
+from keri.kering import Schemes
 from keri.app.httping import CESR_DESTINATION_HEADER
-from keri.core import coring, serdering
+from keri.core import Encrypter, Matter, MtrDex
+from keri.core.serdering import SerderKERI
 
 
 def loadEnds(app, witery):
@@ -103,7 +104,7 @@ class AidCollectionEnd:
         if delkel is not None:
             witness.parser.parse(delkel, local=False)
 
-        serder = serdering.SerderKERI(raw=bytes(kel))
+        serder = SerderKERI(raw=bytes(kel))
         # Parse the event, get the KEL in our Kevers
         witness.parser.parse(kel, local=False)
 
@@ -125,13 +126,13 @@ class AidCollectionEnd:
 
         # Create a Ciper from our own Hab to save the code encrypted
         verfer = witness.hab.kever.verfers[0]
-        if verfer.code not in (coring.MtrDex.Ed25519N, coring.MtrDex.Ed25519):
+        if verfer.code not in (MtrDex.Ed25519N, MtrDex.Ed25519):
             raise ValueError(
                 "Unsupported verkey derivation code = {}." "".format(verfer.code)
             )
-        encrypter = core.Encrypter(verkey=verfer.qb64b)
+        encrypter = Encrypter(verkey=verfer.qb64b)
 
-        seedqb64b = coring.Matter(raw=code, code=coring.MtrDex.Ed25519_Seed).qb64b
+        seedqb64b = Matter(raw=code, code=MtrDex.Ed25519_Seed).qb64b
         cipher = encrypter.encrypt(ser=seedqb64b)
         witness.addCode(code=cipher)
 
@@ -139,27 +140,27 @@ class AidCollectionEnd:
         kever = witness.hab.kevers[serder.pre]
 
         verfer = kever.verfers[0]
-        if verfer.code not in (coring.MtrDex.Ed25519N, coring.MtrDex.Ed25519):
+        if verfer.code not in (MtrDex.Ed25519N, MtrDex.Ed25519):
             raise ValueError(
                 "Unsupported verkey derivation code = {}." "".format(verfer.code)
             )
 
-        encrypter = core.Encrypter(verkey=verfer.qb64b)
-        seedqb64b = coring.Matter(raw=code, code=coring.MtrDex.Ed25519_Seed).qb64b
+        encrypter = Encrypter(verkey=verfer.qb64b)
+        seedqb64b = Matter(raw=code, code=MtrDex.Ed25519_Seed).qb64b
         cipher = encrypter.encrypt(ser=seedqb64b)
 
         urls = witness.hab.fetchUrls(
-            eid=witness.hab.pre, scheme=kering.Schemes.http
-        ) or witness.hab.fetchUrls(eid=witness.hab.pre, scheme=kering.Schemes.https)
+            eid=witness.hab.pre, scheme=Schemes.http
+        ) or witness.hab.fetchUrls(eid=witness.hab.pre, scheme=Schemes.https)
         if not urls:
             raise falcon.HTTPBadRequest(
                 description=f"{witness.hab.name} identifier {witness.hab.pre} does not have any controller endpoints"
             )
 
         url = (
-            urls[kering.Schemes.http]
-            if kering.Schemes.http in urls
-            else urls[kering.Schemes.https]
+            urls[Schemes.http]
+            if Schemes.http in urls
+            else urls[Schemes.https]
         )
         up = urlparse(url)
         oobi = (

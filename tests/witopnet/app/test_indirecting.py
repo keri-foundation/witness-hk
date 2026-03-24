@@ -10,7 +10,7 @@ from falcon import testing
 from unittest.mock import MagicMock, patch
 from keri.app.httping import CESR_DESTINATION_HEADER
 
-from witopnet.app.indirecting import KeyStateEnd, KeyLogEnd
+from witopnet.app import KeyStateEnd, KeyLogEnd
 
 
 class TestKeyStateEnd:
@@ -87,8 +87,8 @@ class TestKeyStateEnd:
         """Test successful key state query"""
         headers = {CESR_DESTINATION_HEADER: self.witness_aid}
 
-        # Mock core.Siger to avoid needing valid CESR bytes
-        with patch("witopnet.app.indirecting.core.Siger") as mock_siger:
+        # Mock Siger to avoid needing valid CESR bytes
+        with patch("witopnet.app.indirecting.Siger") as mock_siger:
             mock_siger_instance = MagicMock()
             mock_siger.return_value = mock_siger_instance
 
@@ -152,8 +152,8 @@ class TestKeyStateEnd:
 
         headers = {CESR_DESTINATION_HEADER: self.witness_aid}
 
-        # Mock core.Siger to avoid CESR parsing issues
-        with patch("witopnet.app.indirecting.core.Siger") as mock_siger:
+        # Mock Siger to avoid CESR parsing issues
+        with patch("witopnet.app.indirecting.Siger") as mock_siger:
             mock_siger.return_value = MagicMock()
 
             response = self.client.simulate_get(

@@ -7,8 +7,8 @@ witopnet.core.oobing package
 """
 
 import falcon
-from keri import kering
-from keri.end import ending
+from keri.kering import Roles
+from keri.end.ending import OOBI_AID_HEADER
 from ordered_set import OrderedSet as oset
 
 
@@ -83,12 +83,12 @@ class OOBIEnd:
 
         msgs = hab.replyToOobi(aid=aid, role=role, eids=eids)
         if not msgs and role is None:
-            msgs = hab.replyToOobi(aid=aid, role=kering.Roles.witness, eids=eids)
+            msgs = hab.replyToOobi(aid=aid, role=Roles.witness, eids=eids)
             msgs.extend(hab.replay(aid))
 
         if msgs:
             rep.status = falcon.HTTP_200  # This is the default status
-            rep.set_header(ending.OOBI_AID_HEADER, aid)
+            rep.set_header(OOBI_AID_HEADER, aid)
             rep.content_type = "application/json+cesr"
             rep.data = bytes(msgs)
 

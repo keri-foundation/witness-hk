@@ -12,18 +12,23 @@ import time
 import falcon
 import pyotp
 from hio.base import doing
-from hio.help import decking
-from keri import help, core
-from keri.app import httping
-from keri.app.httping import CESR_DESTINATION_HEADER
-from keri.core import eventing, coring, serdering, counting
-from keri.core.coring import Ilks
-from keri.core.eventing import reply
-from keri.db import dbing
-from keri.db.dbing import dgKey
+from hio.help import decking, ogler
+
+from keri.kering import Ilks, Kinds
+
+from keri.app.httping import CESR_DESTINATION_HEADER, parseCesrHttpRequest
+
+from keri.core import Siger, Matter, Counter
+from keri.core.serdering import SerderKERI
+from keri.core.coring import Sadder
+from keri.core.eventing import reply, receipt
+from keri.core.counting import CtrDex_1_0
+
+from keri.db.dbing import dgKey, snKey
+
 from keri.help import helping
 
-logger = help.ogler.getLogger()
+logger = ogler.getLogger()
 
 
 class WitnessStart(doing.DoDoer):
@@ -236,15 +241,15 @@ class HttpEnd:
         rep.set_header("Cache-Control", "no-cache")
         rep.set_header("connection", "close")
 
-        cr = httping.parseCesrHttpRequest(req=req)
-        sadder = coring.Sadder(ked=cr.payload, kind=eventing.Kinds.json)
+        cr = parseCesrHttpRequest(req=req)
+        sadder = Sadder(ked=cr.payload, kind=Kinds.json)
         msg = bytearray(sadder.raw)
         msg.extend(cr.attachments.encode("utf-8"))
 
         if (cipher := witness.getCode()) is not None:
 
             plain = witness.hab.decrypt(ser=cipher.raw)
-            scode = coring.Matter(qb64b=plain).raw
+            scode = Matter(qb64b=plain).raw
             # Check for a one-time-password in the Authroizaiton header.  If it works, parse this as "local"
             if (auth := req.get_header("Authorization")) is not None and validCode(
                 scode, auth
@@ -498,8 +503,8 @@ class ReceiptEnd:
         rep.set_header("Cache-Control", "no-cache")
         rep.set_header("connection", "close")
 
-        cr = httping.parseCesrHttpRequest(req=req)
-        serder = serdering.SerderKERI(sad=cr.payload, kind=eventing.Kinds.json)
+        cr = parseCesrHttpRequest(req=req)
+        serder = SerderKERI(sad=cr.payload, kind=Kinds.json)
 
         pre = serder.ked["i"]
         if witness.aids is not None and pre not in witness.aids:
@@ -513,7 +518,7 @@ class ReceiptEnd:
             )
 
         plain = witness.hab.decrypt(ser=cipher.raw)
-        scode = coring.Matter(qb64b=plain).raw
+        scode = Matter(qb64b=plain).raw
 
         ilk = serder.ked["t"]
         if ilk not in (Ilks.icp, Ilks.rot, Ilks.ixn, Ilks.dip, Ilks.drt):
@@ -590,7 +595,7 @@ class ReceiptEnd:
             )
 
         if sn is not None:
-            said = witness.hab.db.getKeLast(key=dbing.snKey(pre=preb, sn=sn))
+            said = witness.hab.db.getKeLast(key=snKey(pre=preb, sn=sn))
 
         if said is None:
             raise falcon.HTTPNotFound(
@@ -598,13 +603,13 @@ class ReceiptEnd:
             )
 
         said = bytes(said)
-        dgkey = dbing.dgKey(preb, said)  # get message
+        dgkey = dgKey(preb, said)  # get message
         if not (raw := witness.hab.db.getEvt(key=dgkey)):
             raise falcon.HTTPNotFound(
                 description="Missing event for dig={}.".format(said)
             )
 
-        serder = serdering.SerderKERI(raw=bytes(raw))
+        serder = SerderKERI(raw=bytes(raw))
         if serder.sn > 0:
             wits = [
                 wit.qb64 for wit in witness.hab.kvy.fetchWitnessState(pre, serder.sn)
@@ -617,12 +622,12 @@ class ReceiptEnd:
                 description=f"{witness.hab.pre} is not a valid witness for {pre} event at "
                 f"{serder.sn}, {wits}"
             )
-        rserder = eventing.receipt(pre=pre, sn=sn, said=said.decode("utf-8"))
+        rserder = receipt(pre=pre, sn=sn, said=said.decode("utf-8"))
         rct = bytearray(rserder.raw)
         if wigs := witness.hab.db.getWigs(key=dgkey):
             rct.extend(
-                counting.Counter(
-                    code=counting.CtrDex_1_0.WitnessIdxSigs, count=len(wigs)
+                Counter(
+                    code=CtrDex_1_0.WitnessIdxSigs, count=len(wigs)
                 ).qb64b
             )
             for wig in wigs:
@@ -677,7 +682,7 @@ class KeyStateEnd:
 
         # get list of witness signatures to ensure we are presenting a fully witnessed event
         wigs = witness.hab.db.getWigs(dgKey(pre, kever.serder.saidb))  # list of wigs
-        wigers = [core.Siger(qb64b=bytes(wig)) for wig in wigs]
+        wigers = [Siger(qb64b=bytes(wig)) for wig in wigs]
 
         if len(wigers) < kever.toader.num:
             msg = f"Witness receipts not found error on event pre={pre}"

@@ -1,8 +1,10 @@
 # -*- encoding: utf-8 -*-
 from dataclasses import dataclass
 
-from keri import core
-from keri.db import dbing, koming, subing
+from keri.core import Cipher
+from keri.db.dbing import LMDBer
+from keri.db.koming import Komer
+from keri.db.subing import IoSetSuber, CesrSuber
 
 
 @dataclass
@@ -20,7 +22,7 @@ class Wit:
     cid: str
 
 
-class Baser(dbing.LMDBer):
+class Baser(LMDBer):
     """LMDB database for the Witness Operational Network.
 
     Extends the base KERI LMDBer with three sub-databases:
@@ -53,14 +55,14 @@ class Baser(dbing.LMDBer):
         """Reopen database and initialize sub-dbs"""
         super(Baser, self).reopen(**kwa)
         # Witness dataclass keyed by witness AID
-        self.wits = koming.Komer(
+        self.wits = Komer(
             db=self,
             subkey="wits.",
             schema=Wit,
         )
         # Controller AID to witness AID index
-        self.cids = subing.IoSetSuber(db=self, subkey="cids.")
+        self.cids = IoSetSuber(db=self, subkey="cids.")
         # Witness to project index key is Witness prefix val is Project SAID
-        self.codes = subing.CesrSuber(db=self, subkey="codes.", klas=core.Cipher)
+        self.codes = CesrSuber(db=self, subkey="codes.", klas=Cipher)
 
         return self.env

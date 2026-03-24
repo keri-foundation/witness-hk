@@ -10,10 +10,11 @@ import argparse
 import logging
 
 from hio.base import doing
-from keri import __version__
-from keri import help
+from hio.help import ogler
 
-from witopnet.core import witnessing
+from keri import __version__
+
+from witopnet.core import setup
 
 d = "Runs KERI witness controller.\n"
 d += "Example:\nwitness -H 5631 -t 5632\n"
@@ -102,17 +103,17 @@ def launch(args):
     Parameters:
         args (Namespace): parsed command-line arguments from argparse
     """
-    help.ogler.level = logging.getLevelName(args.loglevel)
+    ogler.level = logging.getLevelName(args.loglevel)
     baseFormatter = logging.Formatter(FORMAT)  # basic format
     baseFormatter.default_msec_format = None
-    help.ogler.baseConsoleHandler.setFormatter(baseFormatter)
-    help.ogler.level = logging.getLevelName(args.loglevel)
+    ogler.baseConsoleHandler.setFormatter(baseFormatter)
+    ogler.level = logging.getLevelName(args.loglevel)
 
     if args.logfile is not None:
-        help.ogler.headDirPath = args.logfile
-        help.ogler.reopen(name="witopnet", temp=False, clear=True)
+        ogler.headDirPath = args.logfile
+        ogler.reopen(name="witopnet", temp=False, clear=True)
 
-    logger = help.ogler.getLogger()
+    logger = ogler.getLogger()
 
     logger.info(
         "******* Starting Witness Operational Network listening internally: http/%s, externally: http/%s "
@@ -139,7 +140,7 @@ def runMarshal(args, expire=0.0):
         expire (float): Doist run duration in seconds; 0.0 means run forever
     """
 
-    doers = witnessing.setup(
+    doers = setup(
         base=args.base,
         host=args.host,
         port=int(args.http),

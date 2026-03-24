@@ -6,13 +6,16 @@ keri.kli.commands module
 
 import argparse
 
-from hio import help
+from hio.help import ogler
 from hio.base import doing
 
-from keri.app import habbing, agenting, indirecting
-from keri.app.cli.common import existing, displaying
+from keri.app.indirecting import MailboxDirector
+from keri.app.habbing import HaberyDoer
+from keri.app.agenting import WitnessReceiptor
+from keri.app.cli.common.existing import setupHby
+from keri.app.cli.common.displaying import printIdentifier
 
-logger = help.ogler.getLogger()
+logger = ogler.getLogger()
 
 parser = argparse.ArgumentParser(
     description="Submit current event to witnesses for receipting"
@@ -95,9 +98,9 @@ class InceptDoer(doing.DoDoer):
             force (bool): if True, re-submit witness receipts even when a full
                 complement already exists for the current event
         """
-        hby = existing.setupHby(name=name, base=base, bran=bran)
-        self.hbyDoer = habbing.HaberyDoer(habery=hby)  # setup doer
-        self.mbx = indirecting.MailboxDirector(
+        hby = setupHby(name=name, base=base, bran=bran)
+        self.hbyDoer = HaberyDoer(habery=hby)  # setup doer
+        self.mbx = MailboxDirector(
             hby=hby, topics=["/receipt", "/replay", "/reply"]
         )
         self.alias = alias
@@ -124,7 +127,7 @@ class InceptDoer(doing.DoDoer):
         _ = yield self.tock
 
         hab = self.hby.habByName(name=self.alias)
-        self.witDoer = agenting.WitnessReceiptor(hby=self.hby, force=self.force)
+        self.witDoer = WitnessReceiptor(hby=self.hby, force=self.force)
         self.extend([self.witDoer])
 
         if hab.kever.wits:
@@ -132,7 +135,7 @@ class InceptDoer(doing.DoDoer):
             while not self.witDoer.cues:
                 _ = yield self.tock
 
-        displaying.printIdentifier(self.hby, hab.pre)
+        printIdentifier(self.hby, hab.pre)
 
         toRemove = [self.hbyDoer, self.witDoer, self.mbx]
         self.remove(toRemove)

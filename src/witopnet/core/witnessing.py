@@ -12,24 +12,38 @@ from urllib.parse import urlsplit
 import falcon
 from hio.base import doing
 from hio.core import http
-from hio.help import decking
-from keri import kering, core, help
-from keri.app import habbing, storing, forwarding, configing
+from hio.help import decking, ogler
+
+from keri.kering import ConfigurationError, Schemes, Roles
+
+from keri.app.habbing import Habery
+from keri.app.storing import Mailboxer, Respondant
+from keri.app.forwarding import ForwardHandler
+from keri.app.configing import Configer
 from keri.app.httping import Clienter
 from keri.app.indirecting import createHttpServer
 from keri.app.oobiing import Oobiery
-from keri.core import coring, routing, eventing, parsing
+
+from keri.core import Salter, Prefixer
+from keri.core.routing import Revery
+from keri.core.eventing import Kevery
+from keri.core.parsing import Parser
+
 from keri.db.basing import BaserDoer
+
 from keri.help import helping
-from keri.peer import exchanging
-from keri.vdr import viring, verifying
+
+from keri.peer.exchanging import Exchanger
+
+from keri.vdr.viring import Reger
+from keri.vdr.verifying import Verifier
 from keri.vdr.eventing import Tevery
 
-from witopnet.app import indirecting, aiding
-from witopnet.app.indirecting import HttpEnd, ReceiptEnd, KeyStateEnd, KeyLogEnd
-from witopnet.core import httping, basing, oobing
+from witopnet.app import (WitnessStart, HttpEnd, ReceiptEnd,
+                          KeyStateEnd, KeyLogEnd, loadEnds)
+from witopnet.core import Baser, Wit, OOBIEnd, getRequiredParam
 
-logger = help.ogler.getLogger()
+logger = ogler.getLogger()
 
 
 def setup(
@@ -65,9 +79,9 @@ def setup(
     Returns:
         list: doers ready to run under a Doist event loop
     """
-    db = basing.Baser(name="witopnet", base=base)
+    db = Baser(name="witopnet", base=base)
     dbDoer = BaserDoer(db)
-    cf = configing.Configer(name=db.name, headDirPath=headDirPath)
+    cf = Configer(name=db.name, headDirPath=headDirPath)
     qrycues = decking.Deck()
     witery = Witnessery(db=db, base=base, temp=temp, qrycues=qrycues, cf=cf)
 
@@ -134,7 +148,7 @@ def setup(
     )
     srvrDoer = http.ServerDoer(server=server)
 
-    oobiEnd = oobing.OOBIEnd(witery=witery)
+    oobiEnd = OOBIEnd(witery=witery)
     app.add_route("/oobi", oobiEnd)
     app.add_route("/oobi/{aid}", oobiEnd)
     app.add_route("/oobi/{aid}/{role}", oobiEnd)
@@ -144,7 +158,7 @@ def setup(
     app.add_route("/", httpEnd)
     receiptEnd = ReceiptEnd(witery=witery)
     app.add_route("/receipts", receiptEnd)
-    aiding.loadEnds(app, witery=witery)
+    loadEnds(app, witery=witery)
 
     ksnEnd = KeyStateEnd(witery=witery)
     app.add_route("/ksn", ksnEnd)
@@ -170,7 +184,7 @@ class Witnessery(doing.DoDoer):
         temp=False,
         cf=None,
         headDirPath=None,
-        scheme=kering.Schemes.http,
+        scheme=Schemes.http,
         qrycues=None,
         host="127.0.0.1",
         port=5632,
@@ -208,12 +222,12 @@ class Witnessery(doing.DoDoer):
                     self.port = splits.port
                     self.scheme = (
                         splits.scheme
-                        if splits.scheme in kering.Schemes
-                        else kering.Schemes.http
+                        if splits.scheme in Schemes
+                        else Schemes.http
                     )
 
-        if (self.scheme == kering.Schemes.http and self.port == 80) or (
-            self.scheme == kering.Schemes.https and self.port == 443
+        if (self.scheme == Schemes.http and self.port == 80) or (
+            self.scheme == Schemes.https and self.port == 443
         ):
             self.port = None
 
@@ -228,7 +242,7 @@ class Witnessery(doing.DoDoer):
     def reload(self):
         """Load all witness records from the database and instantiate Witness doers."""
         for said, wit in self.db.wits.getItemIter():
-            hby = habbing.Habery(
+            hby = Habery(
                 name=wit.name,
                 base=self.base,
                 temp=self.temp,
@@ -281,10 +295,10 @@ class Witnessery(doing.DoDoer):
             Witness: the newly created and running Witness instance
         """
         # Create a random name from Salter
-        name = core.Salter().qb64
+        name = Salter().qb64
 
         # We need to manage keys from an HSM here
-        hby = habbing.Habery(
+        hby = Habery(
             name=name, base=self.base, headDirPath=self.headPathDir, bran=None
         )
         hab = hby.makeHab(name=name, transferable=False)
@@ -292,12 +306,12 @@ class Witnessery(doing.DoDoer):
 
         msgs = bytearray()
         msgs.extend(
-            hab.makeEndRole(eid=hab.pre, role=kering.Roles.controller, stamp=dt)
+            hab.makeEndRole(eid=hab.pre, role=Roles.controller, stamp=dt)
         )
         msgs.extend(hab.makeLocScheme(url=self.url, scheme=self.scheme, stamp=dt))
         hab.psr.parse(ims=msgs)
 
-        wit = basing.Wit(name=name, cid=aid, eid=hab.pre)
+        wit = Wit(name=name, cid=aid, eid=hab.pre)
 
         self.db.wits.pin(keys=(hab.pre,), val=wit)
         self.db.cids.add(keys=(aid,), val=hab.kever.prefixer.qb64)
@@ -362,30 +376,30 @@ class Witness(doing.DoDoer):
         cues = decking.Deck()
         doers = []
 
-        self.reger = viring.Reger(name=hab.name, db=hab.db, temp=False)
-        verfer = verifying.Verifier(hby=hby, reger=self.reger)
+        self.reger = Reger(name=hab.name, db=hab.db, temp=False)
+        verfer = Verifier(hby=hby, reger=self.reger)
 
-        self.mbx = storing.Mailboxer(name=hab.name, temp=hby.temp)
-        forwarder = forwarding.ForwardHandler(hby=hby, mbx=self.mbx)
-        exchanger = exchanging.Exchanger(hby=hby, handlers=[forwarder])
-        rvy = routing.Revery(db=hby.db, cues=cues)
+        self.mbx = Mailboxer(name=hab.name, temp=hby.temp)
+        forwarder = ForwardHandler(hby=hby, mbx=self.mbx)
+        exchanger = Exchanger(hby=hby, handlers=[forwarder])
+        rvy = Revery(db=hby.db, cues=cues)
 
         clienter = Clienter()
         oobiery = Oobiery(hby=hby, clienter=clienter, rvy=rvy)
 
-        rep = storing.Respondant(hby=hby, mbx=self.mbx, aids=self.aids)
+        rep = Respondant(hby=hby, mbx=self.mbx, aids=self.aids)
 
-        kvy = eventing.Kevery(db=hby.db, lax=True, local=False, rvy=rvy, cues=cues)
+        kvy = Kevery(db=hby.db, lax=True, local=False, rvy=rvy, cues=cues)
         kvy.registerReplyRoutes(router=rvy.rtr)
 
         tvy = Tevery(reger=verfer.reger, db=hby.db, local=False, cues=cues)
 
         tvy.registerReplyRoutes(router=rvy.rtr)
-        self.parser = parsing.Parser(
+        self.parser = Parser(
             framed=True, kvy=kvy, tvy=tvy, exc=exchanger, rvy=rvy
         )
 
-        witStart = indirecting.WitnessStart(
+        witStart = WitnessStart(
             hab=hab,
             parser=self.parser,
             cues=cues,
@@ -482,10 +496,10 @@ class WitnessCollectionEnd:
             falcon.HTTPBadRequest: if ``aid`` is missing or not a valid KERI prefix
         """
         body = req.get_media()
-        aid = httping.getRequiredParam(body, "aid")
+        aid = getRequiredParam(body, "aid")
 
         try:
-            prefixer = coring.Prefixer(qb64=aid)
+            prefixer = Prefixer(qb64=aid)
         except Exception as e:
             raise falcon.HTTPBadRequest(
                 description=f"invalid AID for witnessing: {e.args[0]}"
@@ -493,7 +507,7 @@ class WitnessCollectionEnd:
 
         try:
             witness = self.witery.createWitness(aid=aid)
-        except kering.ConfigurationError as e:
+        except ConfigurationError as e:
             raise falcon.HTTPBadRequest(description=e.args[0])
 
         oobis = witness.oobis()
@@ -524,7 +538,7 @@ class WitnessResourceEnd:
 
         """
         try:
-            coring.Prefixer(qb64=eid)
+            Prefixer(qb64=eid)
         except Exception as e:
             raise falcon.HTTPBadRequest(
                 description=f"invalid AID for witnessing: {e.args[0]}"
@@ -532,7 +546,7 @@ class WitnessResourceEnd:
 
         try:
             self.witery.deleteWitness(eid=eid)
-        except kering.ConfigurationError as e:
+        except ConfigurationError as e:
             raise falcon.HTTPBadRequest(description=e.args[0])
 
         rep.status = falcon.HTTP_204

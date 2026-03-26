@@ -20,14 +20,14 @@ try:
 except ImportError:
     sphinx_rtd_theme = None
 
-# -- Project information -----------------------------------------------------
+# Project information
 
 project = "Witopnet"
 author = "KERI Foundation"
 copyright = "2024 - 2026, KERI Foundation and contributors"
 version = release = witopnet.__version__
 
-# -- General configuration ---------------------------------------------------
+# General configuration
 
 extensions = [
     "sphinx.ext.autodoc",
@@ -43,7 +43,7 @@ napoleon_include_init_with_doc = True
 templates_path = ["_templates"]
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
-# -- HTML output -------------------------------------------------------------
+# HTML output
 
 if sphinx_rtd_theme:
     html_theme = "sphinx_rtd_theme"

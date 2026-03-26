@@ -38,6 +38,14 @@ extensions = [
 
 autosummary_generate = True
 autodoc_member_order = "bysource"
+autodoc_mock_imports = [
+    "falcon",
+    "hio",
+    "keri",
+    "multicommand",
+    "ordered_set",
+    "pyotp",
+]
 napoleon_include_init_with_doc = True
 
 templates_path = ["_templates"]
@@ -50,4 +58,7 @@ if sphinx_rtd_theme:
 else:
     html_theme = "alabaster"
 
-html_static_path = ["_static"]
+STATIC_DIR = os.path.join(os.path.dirname(__file__), "_static")
+
+if os.path.isdir(STATIC_DIR):
+    html_static_path = ["_static"]

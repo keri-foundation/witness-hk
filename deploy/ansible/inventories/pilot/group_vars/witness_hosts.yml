@@ -85,3 +85,6 @@ witness_required_host_vars:
   - witness_alias
   - witness_http_port
   - witness_tcp_port
+  - witness_expire
+  - witness_keripy_repo_version
+  - witness_hio_repo_version

@@ -59,9 +59,12 @@ if ! command -v op >/dev/null 2>&1; then
     exit 1
 fi
 
-if ! command -v ssh-add >/dev/null 2>&1; then
-    echo "ssh-add is required" >&2
-    exit 1
+# Only require ssh-add when we are actually going to open an SSH connection.
+if [[ "$require_ssh_agent" -eq 1 ]]; then
+    if ! command -v ssh-add >/dev/null 2>&1; then
+        echo "ssh-add is required" >&2
+        exit 1
+    fi
 fi
 
 if [[ ! -f "$OP_RUN_ENV_FILE" ]]; then

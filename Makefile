@@ -29,30 +29,30 @@ witness-preflight: ## Validate 1Password-backed inventory values without opening
 
 .PHONY: witness-ping
 witness-ping: ## Check SSH connectivity to the configured witness host
-	@cd "$(ANSIBLE_DIR)" && SSH_AUTH_SOCK="$(ONEPASSWORD_SSH_AUTH_SOCK)" "$(ANSIBLE_WRAPPER)" \
+	@cd "$(ANSIBLE_DIR)" && SSH_AUTH_SOCK="$${SSH_AUTH_SOCK:-$(ONEPASSWORD_SSH_AUTH_SOCK)}" "$(ANSIBLE_WRAPPER)" \
 		bash -lc '$(ANSIBLE_ADHOC) "$(WITNESS_HOST)" -m ping'
 
 .PHONY: witness-check
 witness-check: ## Run preflight, ping, and bootstrap dry-run in one auth batch
-	@cd "$(ANSIBLE_DIR)" && SSH_AUTH_SOCK="$(ONEPASSWORD_SSH_AUTH_SOCK)" "$(ANSIBLE_WRAPPER)" \
+	@cd "$(ANSIBLE_DIR)" && SSH_AUTH_SOCK="$${SSH_AUTH_SOCK:-$(ONEPASSWORD_SSH_AUTH_SOCK)}" "$(ANSIBLE_WRAPPER)" \
 		bash -lc '$(ANSIBLE_PLAYBOOK) playbooks/witness-preflight.yml && \
 		$(ANSIBLE_ADHOC) "$(WITNESS_HOST)" -m ping && \
 		$(ANSIBLE_PLAYBOOK) playbooks/witness-bootstrap.yml --check --diff'
 
 .PHONY: witness-apply
 witness-apply: ## Run preflight and apply the witness bootstrap in one auth batch
-	@cd "$(ANSIBLE_DIR)" && SSH_AUTH_SOCK="$(ONEPASSWORD_SSH_AUTH_SOCK)" "$(ANSIBLE_WRAPPER)" \
+	@cd "$(ANSIBLE_DIR)" && SSH_AUTH_SOCK="$${SSH_AUTH_SOCK:-$(ONEPASSWORD_SSH_AUTH_SOCK)}" "$(ANSIBLE_WRAPPER)" \
 		bash -lc '$(ANSIBLE_PLAYBOOK) playbooks/witness-preflight.yml && \
 		$(ANSIBLE_PLAYBOOK) playbooks/witness-bootstrap.yml'
 
 .PHONY: witness-verify
 witness-verify: ## Run the post-bootstrap witness verification playbook
-	@cd "$(ANSIBLE_DIR)" && SSH_AUTH_SOCK="$(ONEPASSWORD_SSH_AUTH_SOCK)" "$(ANSIBLE_WRAPPER)" \
+	@cd "$(ANSIBLE_DIR)" && SSH_AUTH_SOCK="$${SSH_AUTH_SOCK:-$(ONEPASSWORD_SSH_AUTH_SOCK)}" "$(ANSIBLE_WRAPPER)" \
 		bash -lc '$(ANSIBLE_PLAYBOOK) playbooks/witness-verify.yml'
 
 .PHONY: witness-all
 witness-all: ## Run preflight, ping, apply, and verify in one auth batch
-	@cd "$(ANSIBLE_DIR)" && SSH_AUTH_SOCK="$(ONEPASSWORD_SSH_AUTH_SOCK)" "$(ANSIBLE_WRAPPER)" \
+	@cd "$(ANSIBLE_DIR)" && SSH_AUTH_SOCK="$${SSH_AUTH_SOCK:-$(ONEPASSWORD_SSH_AUTH_SOCK)}" "$(ANSIBLE_WRAPPER)" \
 		bash -lc '$(ANSIBLE_PLAYBOOK) playbooks/witness-preflight.yml && \
 		$(ANSIBLE_ADHOC) "$(WITNESS_HOST)" -m ping && \
 		$(ANSIBLE_PLAYBOOK) playbooks/witness-bootstrap.yml && \
@@ -60,10 +60,10 @@ witness-all: ## Run preflight, ping, apply, and verify in one auth batch
 
 .PHONY: witness-status
 witness-status: ## Show systemd and Circus watcher status for the witness host
-	@cd "$(ANSIBLE_DIR)" && SSH_AUTH_SOCK="$(ONEPASSWORD_SSH_AUTH_SOCK)" "$(ANSIBLE_WRAPPER)" \
+	@cd "$(ANSIBLE_DIR)" && SSH_AUTH_SOCK="$${SSH_AUTH_SOCK:-$(ONEPASSWORD_SSH_AUTH_SOCK)}" "$(ANSIBLE_WRAPPER)" \
 		bash -lc '$(ANSIBLE_ADHOC) "$(WITNESS_HOST)" -b -m shell -a '\''systemctl status circusd-witness --no-pager --lines=20; printf "\\n=== circusctl ===\\n"; /opt/keripy/.venv/bin/circusctl --endpoint ipc:///var/run/keri-circus/ctrl.sock status'\'''
 
 .PHONY: witness-logs
 witness-logs: ## Tail witness stdout and stderr logs from the host
-	@cd "$(ANSIBLE_DIR)" && SSH_AUTH_SOCK="$(ONEPASSWORD_SSH_AUTH_SOCK)" "$(ANSIBLE_WRAPPER)" \
+	@cd "$(ANSIBLE_DIR)" && SSH_AUTH_SOCK="$${SSH_AUTH_SOCK:-$(ONEPASSWORD_SSH_AUTH_SOCK)}" "$(ANSIBLE_WRAPPER)" \
 		bash -lc '$(ANSIBLE_ADHOC) "$(WITNESS_HOST)" -b -m shell -a '\''printf "=== stdout ===\\n"; tail -n $(WITNESS_LOG_LINES) /var/log/keri/witness/stdout.log; printf "\\n=== stderr ===\\n"; tail -n $(WITNESS_LOG_LINES) /var/log/keri/witness/stderr.log'\'''

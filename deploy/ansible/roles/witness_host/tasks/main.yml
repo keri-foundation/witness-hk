@@ -63,21 +63,14 @@
     - witness_checkout_mode == 'source'
     - item.dest in (witness_host_checkout_paths.results | map(attribute='stat') | selectattr('exists') | map(attribute='path') | list)
 
-- name: Mark source checkouts as safe directories for root
-  community.general.git_config:
-    name: safe.directory
-    scope: global
-    value: "{{ item.dest }}"
-    add_mode: add
-  loop: "{{ witness_git_checkouts }}"
-  when: witness_checkout_mode == 'source'
-
 - name: Clone hio and keripy repositories
   ansible.builtin.git:
     repo: "{{ item.0.repo }}"
     dest: "{{ item.0.dest }}"
     version: "{{ item.0.version }}"
     update: true
+  environment:
+    GIT_CONFIG_GLOBAL: /dev/null
   loop: "{{ witness_git_checkouts | zip(witness_host_checkout_paths.results, witness_host_checkout_gitdirs.results) | list }}"
   when:
     - witness_checkout_mode == 'source'

@@ -97,7 +97,7 @@ make witness-logs        # tail stdout and stderr logs
 
 ### Direct playbook invocation
 
-Run from this directory (`deploy/ansible/`):
+Run from this directory (`ansible/`):
 
 ```bash
 # Validate inventory without opening SSH
@@ -187,7 +187,7 @@ At minimum, the operator should be able to say:
 ## Directory Layout
 
 ```
-deploy/ansible/
+ansible/
 ├── .ansible-lint.yml
 ├── ansible.cfg
 ├── op.env.example          # template for 1Password secret references

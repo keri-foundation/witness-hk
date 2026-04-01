@@ -137,6 +137,53 @@ ansible-lint playbooks/witness-preflight.yml \
 The checked-in `.ansible-lint.yml` uses the `production` profile in offline
 mode. Install the linter with `pipx install ansible-lint`.
 
+## Deployment Evidence Checklist
+
+For AI-assisted deployment work, do not treat a successful apply as proof that
+the deployment is correct. Capture evidence from the controller, the host, and
+the running service.
+
+### Minimum Evidence For A Deployment Change
+
+1. **Task scope**
+  - record what was intended to change
+  - note what was not supposed to change
+2. **Controller-side validation**
+  - run `ansible-lint`
+  - run `make witness-preflight`
+  - run `make witness-check`
+3. **Apply evidence**
+  - run `make witness-apply`
+  - keep the terminal output or summarize the important state changes
+4. **Post-apply verification**
+  - run `make witness-verify`
+  - run `make witness-status`
+  - run `make witness-logs`
+5. **Human review of host state**
+  - confirm the service manager sees the unit as healthy
+  - confirm Circus sees the witness process as healthy
+  - confirm the wrapper-backed runtime contract still matches the expected launch path
+  - confirm expected ports or sockets are reachable
+  - confirm recent logs are reviewed using the current boot or current start window, not just the tail of append-only files
+  - confirm a smoke check passed where the lane supports one
+
+### What Counts As Enough Evidence
+
+At minimum, the operator should be able to say:
+
+1. what changed
+2. what commands were run
+3. what outputs were reviewed directly
+4. whether the host converged cleanly
+5. whether any ambiguity remains
+
+### Operational Notes
+
+1. A running PID is not enough. Treat `systemctl status` as one input, not the final proof.
+2. If logs are append-only, tie any error review to the current run window before concluding the service is still broken.
+3. If repeated runs do not converge cleanly, stop and investigate instead of normalizing the drift.
+4. Save or summarize the evidence in the task record or PR notes so the review trail survives after the terminal scrollback is gone.
+
 ## Directory Layout
 
 ```

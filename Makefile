@@ -10,6 +10,22 @@ ONEPASSWORD_SSH_AUTH_SOCK ?= $(HOME)/Library/Group Containers/2BUA8C4S2C.com.1pa
 WITNESS_HOST      ?= witness-do-01
 WITNESS_LOG_LINES ?= 40
 
+define require_witness_host
+[[ "$(WITNESS_HOST)" =~ ^[A-Za-z0-9_.-]+$$ ]] || { \
+	echo "Invalid WITNESS_HOST: $(WITNESS_HOST)" >&2; \
+	echo "Expected a single inventory hostname containing only letters, digits, dot, underscore, or dash." >&2; \
+	exit 1; \
+}
+endef
+
+define require_witness_log_lines
+[[ "$(WITNESS_LOG_LINES)" =~ ^[1-9][0-9]*$$ ]] || { \
+	echo "Invalid WITNESS_LOG_LINES: $(WITNESS_LOG_LINES)" >&2; \
+	echo "Expected WITNESS_LOG_LINES to be a positive integer." >&2; \
+	exit 1; \
+}
+endef
+
 .DEFAULT_GOAL := help
 
 .PHONY: help
@@ -29,11 +45,13 @@ witness-preflight: ## Validate 1Password-backed inventory values without opening
 
 .PHONY: witness-ping
 witness-ping: ## Check SSH connectivity to the configured witness host
+	@$(require_witness_host)
 	@cd "$(ANSIBLE_DIR)" && SSH_AUTH_SOCK="$${SSH_AUTH_SOCK:-$(ONEPASSWORD_SSH_AUTH_SOCK)}" "$(ANSIBLE_WRAPPER)" \
 		bash -lc '$(ANSIBLE_ADHOC) "$(WITNESS_HOST)" -m ping'
 
 .PHONY: witness-check
 witness-check: ## Run preflight, ping, and bootstrap dry-run in one auth batch
+	@$(require_witness_host)
 	@cd "$(ANSIBLE_DIR)" && SSH_AUTH_SOCK="$${SSH_AUTH_SOCK:-$(ONEPASSWORD_SSH_AUTH_SOCK)}" "$(ANSIBLE_WRAPPER)" \
 		bash -lc '$(ANSIBLE_PLAYBOOK) playbooks/witness-preflight.yml && \
 		$(ANSIBLE_ADHOC) "$(WITNESS_HOST)" -m ping && \
@@ -52,6 +70,7 @@ witness-verify: ## Run the post-bootstrap witness verification playbook
 
 .PHONY: witness-all
 witness-all: ## Run preflight, ping, apply, and verify in one auth batch
+	@$(require_witness_host)
 	@cd "$(ANSIBLE_DIR)" && SSH_AUTH_SOCK="$${SSH_AUTH_SOCK:-$(ONEPASSWORD_SSH_AUTH_SOCK)}" "$(ANSIBLE_WRAPPER)" \
 		bash -lc '$(ANSIBLE_PLAYBOOK) playbooks/witness-preflight.yml && \
 		$(ANSIBLE_ADHOC) "$(WITNESS_HOST)" -m ping && \
@@ -60,10 +79,13 @@ witness-all: ## Run preflight, ping, apply, and verify in one auth batch
 
 .PHONY: witness-status
 witness-status: ## Show systemd and Circus watcher status for the witness host
+	@$(require_witness_host)
 	@cd "$(ANSIBLE_DIR)" && SSH_AUTH_SOCK="$${SSH_AUTH_SOCK:-$(ONEPASSWORD_SSH_AUTH_SOCK)}" "$(ANSIBLE_WRAPPER)" \
 		bash -lc '$(ANSIBLE_ADHOC) "$(WITNESS_HOST)" -b -m shell -a '\''systemctl status circusd-witness --no-pager --lines=20; printf "\\n=== circusctl ===\\n"; /opt/keripy/.venv/bin/circusctl --endpoint ipc:///var/run/keri-circus/ctrl.sock status'\'''
 
 .PHONY: witness-logs
 witness-logs: ## Tail witness stdout and stderr logs from the host
+	@$(require_witness_host)
+	@$(require_witness_log_lines)
 	@cd "$(ANSIBLE_DIR)" && SSH_AUTH_SOCK="$${SSH_AUTH_SOCK:-$(ONEPASSWORD_SSH_AUTH_SOCK)}" "$(ANSIBLE_WRAPPER)" \
 		bash -lc '$(ANSIBLE_ADHOC) "$(WITNESS_HOST)" -b -m shell -a '\''printf "=== stdout ===\\n"; tail -n $(WITNESS_LOG_LINES) /var/log/keri/witness/stdout.log; printf "\\n=== stderr ===\\n"; tail -n $(WITNESS_LOG_LINES) /var/log/keri/witness/stderr.log'\'''

@@ -1,25 +1,22 @@
-# Ansible Host-First Witness Inventory And Verification
+# Ansible Host-First Witness Deployment
 
-This directory currently owns the pilot inventory, controller-side preflight,
-host verification playbooks, and operator inspection commands for the
-host-first witness deployment.
+This directory owns the pilot inventory, controller-side preflight, host
+convergence, post-bootstrap verification, and operator inspection commands for
+the host-first witness deployment.
 
-It does not yet own full host convergence. Bootstrap automation and the
-`witness_host` role are introduced separately so this layer can remain valid
-on its own.
-
-## Scope
+## Architecture
 
 ```
-controller
-  ├── pilot inventory
-  ├── preflight assertions
-  ├── verification playbook
-  └── operator inspection commands
+systemd
+  └── circusd-witness.service
+        └── circusd (Circus process manager)
+              └── keripy-witness watcher
+                    └── run-keripy-witness.sh  →  keri runWitness(...)
 ```
 
-This layer validates controller inputs, proves the current host state, and
-exposes inspection commands for an already bootstrapped witness host.
+Ansible owns the machine state: packages, users, directories, Python venv,
+editable checkouts of `keripy` and `hio`, rendered configs, and the systemd
+unit. Circus owns the process lifecycle after the host is prepared.
 
 ## Prerequisites
 
@@ -89,8 +86,9 @@ exposes inspection commands for an already bootstrapped witness host.
 
 ```bash
 make witness-preflight   # validate 1Password env vars — no SSH needed
-make witness-check       # preflight + ping
-make witness-verify      # post-bootstrap validation for an existing host
+make witness-check       # preflight + ping + bootstrap dry-run
+make witness-apply       # preflight + full bootstrap
+make witness-verify      # post-bootstrap validation
 make witness-status      # systemd + Circus status
 make witness-logs        # tail stdout and stderr logs
 ```
@@ -108,7 +106,15 @@ Run from this directory (`ansible/`):
 ./with-op-ssh-agent.sh \
   ansible -i inventories/pilot/hosts.yml witness-do-01 -m ping
 
-# Verify an already bootstrapped host
+# Dry-run bootstrap
+./with-op-ssh-agent.sh \
+  ansible-playbook -i inventories/pilot/hosts.yml playbooks/witness-bootstrap.yml --check --diff
+
+# Apply bootstrap
+./with-op-ssh-agent.sh \
+  ansible-playbook -i inventories/pilot/hosts.yml playbooks/witness-bootstrap.yml
+
+# Verify
 ./with-op-ssh-agent.sh \
   ansible-playbook -i inventories/pilot/hosts.yml playbooks/witness-verify.yml
 ```
@@ -130,8 +136,10 @@ The current validated escalation path on the pilot host is:
 ## Lint
 
 ```bash
-ansible-lint playbooks/witness-preflight.yml \
-            playbooks/witness-verify.yml
+ansible-lint playbooks/witness-bootstrap.yml \
+            playbooks/witness-preflight.yml \
+            playbooks/witness-verify.yml \
+            roles/witness_host
 ```
 
 The checked-in `.ansible-lint.yml` uses the `production` profile in offline
@@ -202,5 +210,29 @@ ansible/
 │           └── witness-do-01.yml   # pilot host overrides
 ├── playbooks/
 │   ├── witness-preflight.yml   # inventory validation (no SSH)
+│   ├── witness-bootstrap.yml   # full host convergence
 │   └── witness-verify.yml      # post-bootstrap health checks
+└── roles/
+  └── witness_host/
+    ├── handlers/main.yml
+    ├── tasks/main.yml
+    └── templates/
+      ├── circus-witness.ini.j2
+      ├── circusd-witness.service.j2
+      └── run-keripy-witness.sh.j2
 ```
+
+## What the Bootstrap Does
+
+1. Installs system packages: `git`, `rsync`, `build-essential`,
+   `libsodium-dev`, `python3.14`, `python3.14-venv`
+2. Creates the `keri` system user and group
+3. Creates directories: `/opt`, `/etc/keri`, `/usr/local/var/keri`,
+   `/var/log/keri/witness`
+4. Clones `keripy` (`/opt/keripy`) and `hio` (`/opt/hio`) from GitHub
+5. Creates a Python 3.14 venv at `/opt/keripy/.venv`
+6. Installs `circus` and editable installs of `hio` and `keripy` into the venv
+7. Renders `/opt/keripy/ops/run-keripy-witness.sh` from template
+8. Renders `/etc/keri/circus-witness.ini` from template (IPC-only control socket)
+9. Renders `/etc/systemd/system/circusd-witness.service` from template
+10. Enables and starts the `circusd-witness` systemd unit

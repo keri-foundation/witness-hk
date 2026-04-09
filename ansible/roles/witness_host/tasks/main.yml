@@ -109,6 +109,16 @@
     - item.dest in (witness_host_checkout_paths.results | map(attribute='stat') | selectattr('exists') | map(attribute='path') | list)
     - item.dest not in (witness_host_stale_checkout_paths | default([]))
 
+- name: Ensure source checkout directories exist before clone
+  ansible.builtin.file:
+    path: "{{ item.dest }}"
+    state: directory
+    owner: "{{ witness_service_user }}"
+    group: "{{ witness_service_group }}"
+    mode: "0755"
+  loop: "{{ witness_git_checkouts }}"
+  when: witness_checkout_mode == 'source'
+
 - name: Clone hio and keripy repositories
   ansible.builtin.git:
     repo: "{{ item.0.repo }}"
@@ -117,6 +127,8 @@
     update: true
   environment:
     GIT_CONFIG_GLOBAL: /dev/null
+  become: true
+  become_user: "{{ witness_service_user }}"
   loop: "{{ witness_git_checkouts | zip(witness_host_checkout_paths.results, witness_host_checkout_gitdirs.results) | list }}"
   when:
     - witness_checkout_mode == 'source'
@@ -140,6 +152,14 @@
     group: "{{ witness_service_group }}"
     mode: "0755"
 
+- name: Ensure witness virtualenv path ownership
+  ansible.builtin.file:
+    path: "{{ witness_venv_path }}"
+    state: directory
+    owner: "{{ witness_service_user }}"
+    group: "{{ witness_service_group }}"
+    mode: "0755"
+
 - name: Create witness virtualenv
   ansible.builtin.command:
     argv:
@@ -149,11 +169,15 @@
       - "{{ witness_venv_path }}"
   args:
     creates: "{{ witness_venv_path }}/bin/python"
+  become: true
+  become_user: "{{ witness_service_user }}"
 
 - name: Install Python packages required for Circus
   ansible.builtin.pip:
     name: "{{ witness_python_packages }}"
     executable: "{{ witness_pip_executable }}"
+  become: true
+  become_user: "{{ witness_service_user }}"
   when: witness_python_packages | length > 0
 
 - name: Install editable local hio and keripy packages
@@ -161,6 +185,8 @@
     name: "{{ item }}"
     editable: true
     executable: "{{ witness_pip_executable }}"
+  become: true
+  become_user: "{{ witness_service_user }}"
   loop: "{{ witness_editable_python_paths }}"
   when:
     - witness_checkout_mode == 'source'

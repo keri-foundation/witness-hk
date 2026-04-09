@@ -1,0 +1,24 @@
+ansible_user: >-
+  {{
+    lookup('ansible.builtin.env', 'WITNESS_ANSIBLE_USER', default='') | trim
+  }}
+ansible_host: >-
+  {{
+    lookup('ansible.builtin.env', 'WITNESS_ANSIBLE_HOST', default='') | trim | regex_replace('^.*@', '')
+  }}
+ansible_become_method: su
+ansible_become_user: root
+ansible_become_password: >-
+  {{
+    lookup('ansible.builtin.env', 'WITNESS_ANSIBLE_BECOME_PASSWORD', default='') | trim
+  }}
+
+witness_name: witness-do-01
+witness_base: witness-do-01
+witness_alias: witness-do-01
+witness_http_port: 5631
+witness_tcp_port: 5632
+witness_expire: 0.0
+
+witness_keripy_repo_version: main
+witness_hio_repo_version: main

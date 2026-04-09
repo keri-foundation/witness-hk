@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+set -o errexit
+set -o nounset
+set -o pipefail
+
+KERIPY_HOME="${KERIPY_HOME:-{{ witness_keripy_home }}}"
+HIO_HOME="${HIO_HOME:-}"
+PYTHON_BIN="${PYTHON_BIN:-{{ witness_python_bin }}}"
+WITNESS_NAME="${WITNESS_NAME:-{{ witness_name }}}"
+WITNESS_BASE="${WITNESS_BASE:-{{ witness_base }}}"
+WITNESS_ALIAS="${WITNESS_ALIAS:-{{ witness_alias }}}"
+WITNESS_HTTP_PORT="${WITNESS_HTTP_PORT:-{{ witness_http_port }}}"
+WITNESS_TCP_PORT="${WITNESS_TCP_PORT:-{{ witness_tcp_port }}}"
+WITNESS_EXPIRE="${WITNESS_EXPIRE:-{{ witness_expire }}}"
+
+export WITNESS_NAME
+export WITNESS_BASE
+export WITNESS_ALIAS
+export WITNESS_HTTP_PORT
+export WITNESS_TCP_PORT
+export WITNESS_EXPIRE
+
+if [[ "${WITNESS_BASE}" = /* ]]; then
+    echo "WITNESS_BASE must remain a relative path: ${WITNESS_BASE}" >&2
+    exit 1
+fi
+
+if [[ -z "${HIO_HOME}" ]]; then
+    sibling_hio="$(cd "${KERIPY_HOME}/.." && pwd)/hio"
+    if [[ -d "${sibling_hio}/src" ]]; then
+        HIO_HOME="${sibling_hio}"
+    fi
+fi
+
+cd "${KERIPY_HOME}"
+if [[ -n "${HIO_HOME}" ]]; then
+    export PYTHONPATH="${KERIPY_HOME}/src:${HIO_HOME}/src"
+else
+    export PYTHONPATH="${KERIPY_HOME}/src"
+fi
+
+exec "${PYTHON_BIN}" - <<'PY'
+import os
+
+from keri.cli.commands.witness.start import runWitness
+
+
+runWitness(
+    name=os.environ["WITNESS_NAME"],
+    base=os.environ["WITNESS_BASE"],
+    alias=os.environ["WITNESS_ALIAS"],
+    http=int(os.environ["WITNESS_HTTP_PORT"]),
+    tcp=int(os.environ["WITNESS_TCP_PORT"]),
+    expire=float(os.environ["WITNESS_EXPIRE"]),
+    configFile=None,
+)
+PY

@@ -1,0 +1,31 @@
+[Unit]
+Description=KERI witness Circus process manager
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ witness_service_user }}
+Group={{ witness_service_group }}
+UMask=0027
+WorkingDirectory={{ witness_keripy_home }}
+RuntimeDirectory=keri-circus
+RuntimeDirectoryMode=0750
+ExecStart={{ witness_circusd_bin }} {{ witness_circus_config_path }}
+ExecReload={{ witness_circusctl_bin }} --endpoint {{ witness_circus_endpoint }} reload
+Restart=always
+RestartSec=5
+LimitNOFILE=65536
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectControlGroups=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+PrivateTmp=true
+RestrictSUIDSGID=true
+LockPersonality=true
+ReadWritePaths={{ witness_keri_data_dir }} {{ witness_runtime_dir }} {{ witness_log_dir }}
+
+[Install]
+WantedBy=multi-user.target

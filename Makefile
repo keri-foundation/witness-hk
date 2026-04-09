@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 
 ROOT_DIR     := $(CURDIR)
-ANSIBLE_DIR  := $(ROOT_DIR)/deploy/ansible
+ANSIBLE_DIR  := $(ROOT_DIR)/ansible
 ANSIBLE_WRAPPER  := $(ANSIBLE_DIR)/with-op-ssh-agent.sh
 ANSIBLE_INVENTORY := inventories/pilot/hosts.yml
 ANSIBLE_PLAYBOOK  := ansible-playbook -i $(ANSIBLE_INVENTORY)
@@ -53,16 +53,32 @@ witness-ping: ## Check SSH connectivity to the configured witness host
 		bash -lc '$(ANSIBLE_ADHOC) "$(WITNESS_HOST)" -m ping'
 
 .PHONY: witness-check
-witness-check: ## Run preflight and ping in one auth batch
+witness-check: ## Run preflight, ping, and bootstrap dry-run in one auth batch
 	@$(require_witness_host)
 	@cd "$(ANSIBLE_DIR)" && SSH_AUTH_SOCK="$${SSH_AUTH_SOCK:-$(ONEPASSWORD_SSH_AUTH_SOCK)}" "$(ANSIBLE_WRAPPER)" \
 		bash -lc '$(ANSIBLE_PLAYBOOK) playbooks/witness-preflight.yml && \
-		$(ANSIBLE_ADHOC) "$(WITNESS_HOST)" -m ping'
+		$(ANSIBLE_ADHOC) "$(WITNESS_HOST)" -m ping && \
+		$(ANSIBLE_PLAYBOOK) playbooks/witness-bootstrap.yml --check --diff'
+
+.PHONY: witness-apply
+witness-apply: ## Run preflight and apply the witness bootstrap in one auth batch
+	@cd "$(ANSIBLE_DIR)" && SSH_AUTH_SOCK="$${SSH_AUTH_SOCK:-$(ONEPASSWORD_SSH_AUTH_SOCK)}" "$(ANSIBLE_WRAPPER)" \
+		bash -lc '$(ANSIBLE_PLAYBOOK) playbooks/witness-preflight.yml && \
+		$(ANSIBLE_PLAYBOOK) playbooks/witness-bootstrap.yml'
 
 .PHONY: witness-verify
 witness-verify: ## Run the post-bootstrap witness verification playbook
 	@cd "$(ANSIBLE_DIR)" && SSH_AUTH_SOCK="$${SSH_AUTH_SOCK:-$(ONEPASSWORD_SSH_AUTH_SOCK)}" "$(ANSIBLE_WRAPPER)" \
 		bash -lc '$(ANSIBLE_PLAYBOOK) playbooks/witness-verify.yml'
+
+.PHONY: witness-all
+witness-all: ## Run preflight, ping, apply, and verify in one auth batch
+	@$(require_witness_host)
+	@cd "$(ANSIBLE_DIR)" && SSH_AUTH_SOCK="$${SSH_AUTH_SOCK:-$(ONEPASSWORD_SSH_AUTH_SOCK)}" "$(ANSIBLE_WRAPPER)" \
+		bash -lc '$(ANSIBLE_PLAYBOOK) playbooks/witness-preflight.yml && \
+		$(ANSIBLE_ADHOC) "$(WITNESS_HOST)" -m ping && \
+		$(ANSIBLE_PLAYBOOK) playbooks/witness-bootstrap.yml && \
+		$(ANSIBLE_PLAYBOOK) playbooks/witness-verify.yml'
 
 .PHONY: witness-status
 witness-status: ## Show systemd and Circus watcher status for the witness host

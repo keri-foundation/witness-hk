@@ -1,0 +1,31 @@
+[circus]
+endpoint = {{ witness_circus_endpoint }}
+pubsub_endpoint = {{ witness_circus_pubsub_endpoint }}
+stats_endpoint = {{ witness_circus_stats_endpoint }}
+statsd = {{ witness_circus_statsd }}
+httpd = false
+
+[watcher:keripy-witness]
+cmd = {{ witness_wrapper_path }}
+working_dir = {{ witness_keripy_home }}
+shell = false
+uid = {{ witness_service_user }}
+gid = {{ witness_service_group }}
+numprocesses = 1
+autostart = true
+autorestart = true
+stdout_stream.class = FileStream
+stdout_stream.filename = {{ witness_stdout_log_path }}
+stderr_stream.class = FileStream
+stderr_stream.filename = {{ witness_stderr_log_path }}
+stop_signal = {{ witness_stop_signal }}
+graceful_timeout = {{ witness_graceful_timeout }}
+
+[env:keripy-witness]
+KERIPY_HOME = {{ witness_keripy_home }}
+WITNESS_NAME = {{ witness_name }}
+WITNESS_BASE = {{ witness_base }}
+WITNESS_ALIAS = {{ witness_alias }}
+WITNESS_HTTP_PORT = {{ witness_http_port }}
+WITNESS_TCP_PORT = {{ witness_tcp_port }}
+WITNESS_EXPIRE = {{ witness_expire }}

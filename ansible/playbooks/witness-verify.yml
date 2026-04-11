@@ -163,3 +163,96 @@
           Witness runtime is unhealthy.
           sample_1={{ witness_child_sample_1_lines | first }}
           sample_2={{ witness_child_sample_2_lines | first }}
+
+    - name: Read rendered systemd unit
+      ansible.builtin.slurp:
+        src: "{{ witness_service_unit_path }}"
+      register: witness_unit_content
+
+    - name: Decode witness unit content
+      ansible.builtin.set_fact:
+        witness_unit_text: "{{ witness_unit_content.content | b64decode }}"
+
+    - name: Assert witness hardening directives are present
+      ansible.builtin.assert:
+        that:
+          - "'ProtectSystem=strict' in witness_unit_text"
+          - "'ProtectHome=true' in witness_unit_text"
+          - "'NoNewPrivileges=true' in witness_unit_text"
+          - "'/usr/local/var/keri' in witness_unit_text"
+        fail_msg: >-
+          Witness systemd unit is missing expected hardening directives or
+          /usr/local/var/keri is not present in ReadWritePaths
+
+    - name: Truncate witness stdout log for fresh error sampling
+      ansible.builtin.command:
+        argv:
+          - truncate
+          - -s
+          - "0"
+          - "{{ witness_stdout_log_path }}"
+      changed_when: true
+
+    - name: Wait for fresh witness log output
+      ansible.builtin.pause:
+        seconds: 5
+
+    - name: Read fresh witness stdout log content
+      ansible.builtin.slurp:
+        src: "{{ witness_stdout_log_path }}"
+      register: witness_fresh_stdout
+
+    - name: Assert no Permission Denied errors in fresh witness output
+      ansible.builtin.assert:
+        that:
+          - "'Permission denied' not in (witness_fresh_stdout.content | b64decode)"
+        fail_msg: >-
+          Fresh witness stdout contains 'Permission denied', which indicates the
+          runtime is still hitting a blocked filesystem path under systemd
+          hardening.
+
+    - name: Check /usr/local/var/keri is writable by witness service user
+      ansible.builtin.command:
+        argv:
+          - su
+          - -s
+          - /bin/bash
+          - -c
+          - test -w /usr/local/var/keri && echo WRITABLE || echo NOT_WRITABLE
+          - "{{ witness_service_user }}"
+      register: witness_keri_dir_check
+      changed_when: false
+
+    - name: Assert /usr/local/var/keri is writable
+      ansible.builtin.assert:
+        that:
+          - "'WRITABLE' in witness_keri_dir_check.stdout"
+        fail_msg: >-
+          /usr/local/var/keri is not writable by {{ witness_service_user }}.
+          That would force hio fallback into HOME under ProtectHome=true.
+
+    - name: Read rendered Circus config
+      ansible.builtin.slurp:
+        src: "{{ witness_circus_config_path }}"
+      register: witness_circus_config_content
+
+    - name: Assert HOME is set in Circus env
+      ansible.builtin.assert:
+        that:
+          - "'HOME' in (witness_circus_config_content.content | b64decode)"
+        fail_msg: >-
+          Witness Circus config does not set HOME inside the runtime env block.
+
+    - name: Read witness child process environment
+      ansible.builtin.slurp:
+        src: "/proc/{{ witness_child_parts_1[0] }}/environ"
+      register: witness_child_environ
+
+    - name: Assert running witness process has safe HOME
+      ansible.builtin.assert:
+        that:
+            - "('HOME=' ~ witness_keri_data_dir) in ((witness_child_environ.content | b64decode).replace('\u0000', '\n'))"
+        fail_msg: >-
+          Running witness process does not have HOME={{ witness_keri_data_dir }}.
+          That weakens the ProtectHome=true fallback contract even if the Circus
+          config file looks correct.

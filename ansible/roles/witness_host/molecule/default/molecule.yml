@@ -1,0 +1,158 @@
+---
+dependency:
+  name: galaxy
+  options:
+    role-file: molecule/requirements.yml
+    requirements-file: molecule/collections.yml
+
+scenario:
+  test_sequence:
+    - dependency
+    - destroy
+    - syntax
+    - create
+    - prepare
+    - converge
+    - verify
+    - destroy
+  destroy_sequence:
+    - destroy
+
+driver:
+  name: docker
+
+platforms:
+  - name: witness-systemd
+    groups:
+      - witness_hosts
+    image: molecule_local/witness-ubuntu2510-systemd:latest
+    dockerfile: Dockerfile.j2
+    pre_build_image: false
+    command: /lib/systemd/systemd
+    override_command: false
+    cgroupns_mode: host
+    privileged: true
+    tmpfs:
+      - /run
+      - /tmp
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+    published_ports:
+      - "0.0.0.0:5631:5631/tcp"
+      - "0.0.0.0:5632:5632/tcp"
+    env:
+      container: docker
+
+provisioner:
+  name: ansible
+  env:
+    ANSIBLE_ROLES_PATH: ../../..
+  playbooks:
+    prepare: prepare.yml
+    converge: converge.yml
+    verify: verify.yml
+  inventory:
+    group_vars:
+      all:
+        witness_service_user: keri
+        witness_service_group: keri
+        witness_service_shell: /bin/bash
+        witness_systemd_service_name: circusd-witness
+
+        witness_repo_parent_dir: /opt
+        witness_keripy_home: /opt/keripy
+        witness_hio_home: /opt/hio
+        witness_keri_config_dir: /etc/keri
+        witness_circus_config_path: /etc/keri/circus-witness.ini
+        witness_service_unit_path: /etc/systemd/system/circusd-witness.service
+        witness_keri_data_dir: /usr/local/var/keri
+        witness_runtime_dir: /var/run/keri-circus
+        witness_log_dir: /var/log/keri/witness
+        witness_stdout_log_path: /var/log/keri/witness/stdout.log
+        witness_stderr_log_path: /var/log/keri/witness/stderr.log
+        witness_wrapper_path: /opt/keripy/ops/run-keripy-witness.sh
+        witness_venv_path: /opt/keripy/.venv
+
+        witness_shell_bin: /bin/bash
+        witness_python_bootstrap_bin: python3.14
+        witness_python_bin: /opt/keripy/.venv/bin/python
+        witness_pip_executable: /opt/keripy/.venv/bin/pip
+        witness_circusd_bin: /opt/keripy/.venv/bin/circusd
+        witness_circusctl_bin: /opt/keripy/.venv/bin/circusctl
+
+        witness_circus_endpoint: ipc:///var/run/keri-circus/ctrl.sock
+        witness_circus_pubsub_endpoint: ipc:///var/run/keri-circus/pub.sock
+        witness_circus_stats_endpoint: ipc:///var/run/keri-circus/stats.sock
+        witness_circus_statsd: 0
+        witness_stop_signal: TERM
+        witness_graceful_timeout: 30
+
+        witness_system_packages:
+          - git
+          - rsync
+          - build-essential
+          - libsodium-dev
+          - python3.14
+          - python3.14-venv
+          - python3-pip
+
+        witness_python_packages:
+          - circus
+
+        witness_checkout_mode: source
+        witness_keripy_repo_url: https://github.com/WebOfTrust/keripy
+        witness_hio_repo_url: https://github.com/ioflo/hio
+
+        witness_directories:
+          - path: "{{ witness_repo_parent_dir }}"
+            owner: root
+            group: root
+            mode: "0755"
+          - path: "{{ witness_keri_config_dir }}"
+            owner: root
+            group: "{{ witness_service_group }}"
+            mode: "0750"
+          - path: "{{ witness_log_dir }}"
+            owner: "{{ witness_service_user }}"
+            group: "{{ witness_service_group }}"
+            mode: "0750"
+          - path: "{{ witness_keri_data_dir }}"
+            owner: "{{ witness_service_user }}"
+            group: "{{ witness_service_group }}"
+            mode: "0750"
+
+        witness_git_checkouts:
+          - repo: "{{ witness_hio_repo_url }}"
+            name: hio
+            dest: "{{ witness_hio_home }}"
+            version: "{{ witness_hio_repo_version }}"
+          - repo: "{{ witness_keripy_repo_url }}"
+            name: keripy
+            dest: "{{ witness_keripy_home }}"
+            version: "{{ witness_keripy_repo_version }}"
+
+        witness_editable_python_paths:
+          - "{{ witness_hio_home }}"
+          - "{{ witness_keripy_home }}"
+
+        witness_name: witness-molecule
+        witness_base: witness-molecule
+        witness_alias: witness-molecule
+        witness_http_port: 5631
+        witness_tcp_port: 5632
+        witness_expire: 0.0
+        witness_keripy_repo_version: main
+        witness_hio_repo_version: main
+
+        witness_required_host_vars:
+          - witness_name
+          - witness_base
+          - witness_alias
+          - witness_http_port
+          - witness_tcp_port
+          - witness_expire
+          - witness_keripy_repo_version
+          - witness_hio_repo_version
+
+verifier:
+  name: ansible

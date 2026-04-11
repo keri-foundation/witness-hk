@@ -10,6 +10,7 @@ ONEPASSWORD_SSH_AUTH_SOCK ?= $(HOME)/Library/Group Containers/2BUA8C4S2C.com.1pa
 WITNESS_HOST              ?= witness-do-01
 WITNESS_LOG_LINES         ?= 40
 WITNESS_SYSTEMD_SERVICE   ?= circusd-witness
+WITNESS_SYSTEMD_UNIT      ?= /etc/systemd/system/circusd-witness.service
 WITNESS_CIRCUSCTL_BIN     ?= /opt/keripy/.venv/bin/circusctl
 WITNESS_CIRCUS_ENDPOINT   ?= ipc:///var/run/keri-circus/ctrl.sock
 
@@ -86,9 +87,41 @@ witness-status: ## Show systemd and Circus watcher status for the witness host
 	@cd "$(ANSIBLE_DIR)" && SSH_AUTH_SOCK="$${SSH_AUTH_SOCK:-$(ONEPASSWORD_SSH_AUTH_SOCK)}" "$(ANSIBLE_WRAPPER)" \
 		bash -lc '$(ANSIBLE_ADHOC) "$(WITNESS_HOST)" -b -m shell -a '\''systemctl status $(WITNESS_SYSTEMD_SERVICE) --no-pager --lines=20; printf "\\n=== circusctl ===\\n"; $(WITNESS_CIRCUSCTL_BIN) --endpoint $(WITNESS_CIRCUS_ENDPOINT) status'\'''
 
+.PHONY: witness-systemd-verify
+witness-systemd-verify: ## Run systemd-analyze verify for the witness unit on the host
+	@$(require_witness_host)
+	@cd "$(ANSIBLE_DIR)" && SSH_AUTH_SOCK="$${SSH_AUTH_SOCK:-$(ONEPASSWORD_SSH_AUTH_SOCK)}" "$(ANSIBLE_WRAPPER)" \
+		bash -lc '$(ANSIBLE_ADHOC) "$(WITNESS_HOST)" -b -m shell -a '\''systemd-analyze verify $(WITNESS_SYSTEMD_UNIT)'\'''
+
 .PHONY: witness-logs
 witness-logs: ## Tail witness stdout and stderr logs from the host
 	@$(require_witness_host)
 	@$(require_witness_log_lines)
 	@cd "$(ANSIBLE_DIR)" && SSH_AUTH_SOCK="$${SSH_AUTH_SOCK:-$(ONEPASSWORD_SSH_AUTH_SOCK)}" "$(ANSIBLE_WRAPPER)" \
 		bash -lc '$(ANSIBLE_ADHOC) "$(WITNESS_HOST)" -b -m shell -a '\''printf "=== stdout ===\\n"; tail -n $(WITNESS_LOG_LINES) /var/log/keri/witness/stdout.log; printf "\\n=== stderr ===\\n"; tail -n $(WITNESS_LOG_LINES) /var/log/keri/witness/stderr.log'\'''
+
+# ── Molecule Integration Testing ─────────────────────────────────────
+
+MOLECULE_DIR := $(ANSIBLE_DIR)/roles/witness_host
+
+##@ Molecule Integration Tests
+
+.PHONY: molecule-test
+molecule-test: ## Run full Molecule test cycle (create → converge → verify → destroy)
+	@cd "$(MOLECULE_DIR)" && molecule test
+
+.PHONY: molecule-converge
+molecule-converge: ## Create container and apply the role (idempotent — rerun to test changes)
+	@cd "$(MOLECULE_DIR)" && molecule converge
+
+.PHONY: molecule-verify
+molecule-verify: ## Run systemd-hardening verification against the running container
+	@cd "$(MOLECULE_DIR)" && molecule verify
+
+.PHONY: molecule-destroy
+molecule-destroy: ## Destroy the Molecule container
+	@cd "$(MOLECULE_DIR)" && molecule destroy
+
+.PHONY: molecule-login
+molecule-login: ## Open a shell in the running Molecule container
+	@cd "$(MOLECULE_DIR)" && molecule login

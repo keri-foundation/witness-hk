@@ -1,0 +1,2 @@
+---
+- import_playbook: ../../../../playbooks/witness-verify.yml

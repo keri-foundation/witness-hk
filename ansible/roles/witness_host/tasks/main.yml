@@ -57,16 +57,17 @@
     - item.1.stat.exists
     - not item.2.stat.exists
 
-- name: Validate existing git origin remotes
+- name: Validate existing git origin remote URLs
   ansible.builtin.command:
     argv:
       - git
+      - -c
+      - "safe.directory={{ item.0.dest }}"
       - -C
       - "{{ item.0.dest }}"
-      - ls-remote
+      - remote
+      - get-url
       - origin
-      - -h
-      - "refs/heads/{{ item.0.version }}"
   environment:
     GIT_CONFIG_GLOBAL: /dev/null
   loop: "{{ witness_git_checkouts | zip(witness_host_checkout_paths.results, witness_host_checkout_gitdirs.results) | list }}"
@@ -79,28 +80,27 @@
     - item.1.stat.exists
     - item.2.stat.exists
 
-- name: Track stale git source trees with invalid origin remote
+- name: Reset stale git source tree tracking
   ansible.builtin.set_fact:
-    witness_host_stale_checkout_paths: >-
-      {{
-        witness_host_checkout_origins.results
-        | default([])
-        | selectattr('rc', 'defined')
-        | selectattr('rc', 'ne', 0)
-        | map(attribute='item.0.dest')
-        | list
-      }}
+    witness_host_stale_checkout_paths: []
   when: witness_checkout_mode == 'source'
 
-- name: Remove stale git source trees with invalid origin remote
-  ansible.builtin.file:
-    path: "{{ item.item.0.dest }}"
-    state: absent
+- name: Track stale git source trees with invalid origin remote
+  ansible.builtin.set_fact:
+    witness_host_stale_checkout_paths: "{{ (witness_host_stale_checkout_paths | default([])) + [item.item.0.dest] }}"
   loop: "{{ witness_host_checkout_origins.results | default([]) }}"
   when:
     - witness_checkout_mode == 'source'
     - item.rc is defined
-    - item.rc != 0
+    - item.rc != 0 or (item.stdout | trim) != item.item.0.repo
+
+- name: Remove stale git source trees with invalid origin remote
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop: "{{ witness_host_stale_checkout_paths | default([]) }}"
+  when:
+    - witness_checkout_mode == 'source'
 
 - name: Ensure source checkout ownership
   ansible.builtin.file:
@@ -115,16 +115,6 @@
     - item.dest in (witness_host_checkout_paths.results | map(attribute='stat') | selectattr('exists') | map(attribute='path') | list)
     - item.dest not in (witness_host_stale_checkout_paths | default([]))
 
-- name: Ensure source checkout directories exist before clone
-  ansible.builtin.file:
-    path: "{{ item.dest }}"
-    state: directory
-    owner: "{{ witness_service_user }}"
-    group: "{{ witness_service_group }}"
-    mode: "0755"
-  loop: "{{ witness_git_checkouts }}"
-  when: witness_checkout_mode == 'source'
-
 - name: Clone hio and keripy repositories
   ansible.builtin.git:
     repo: "{{ item.0.repo }}"
@@ -133,6 +123,9 @@
     update: true
   environment:
     GIT_CONFIG_GLOBAL: /dev/null
+    GIT_CONFIG_COUNT: "1"
+    GIT_CONFIG_KEY_0: safe.directory
+    GIT_CONFIG_VALUE_0: "{{ item.0.dest }}"
   become: true
   become_user: "{{ witness_service_user }}"
   loop: "{{ witness_git_checkouts | zip(witness_host_checkout_paths.results, witness_host_checkout_gitdirs.results) | list }}"
@@ -166,37 +159,49 @@
     group: "{{ witness_service_group }}"
     mode: "0755"
 
-- name: Create witness virtualenv
-  ansible.builtin.command:
-    argv:
-      - "{{ witness_python_bootstrap_bin }}"
-      - -m
-      - venv
-      - "{{ witness_venv_path }}"
-  args:
-    creates: "{{ witness_venv_path }}/bin/python"
+- name: Install witness Python runtime as service user
   become: true
   become_user: "{{ witness_service_user }}"
+  block:
+    - name: Create witness virtualenv
+      ansible.builtin.command:
+        argv:
+          - "{{ witness_python_bootstrap_bin }}"
+          - -m
+          - venv
+          - "{{ witness_venv_path }}"
+      args:
+        creates: "{{ witness_venv_path }}/bin/python"
+      when: not ansible_check_mode
 
-- name: Install Python packages required for Circus
-  ansible.builtin.pip:
-    name: "{{ witness_python_packages }}"
-    executable: "{{ witness_pip_executable }}"
-  become: true
-  become_user: "{{ witness_service_user }}"
-  when: witness_python_packages | length > 0
+    - name: Bootstrap pip inside the witness virtualenv
+      ansible.builtin.command:
+        argv:
+          - "{{ witness_python_bin }}"
+          - -m
+          - ensurepip
+          - --upgrade
+      args:
+        creates: "{{ witness_venv_path }}/bin/pip"
+      when: not ansible_check_mode
 
-- name: Install editable local hio and keripy packages
-  ansible.builtin.pip:
-    name: "{{ item }}"
-    editable: true
-    executable: "{{ witness_pip_executable }}"
-  become: true
-  become_user: "{{ witness_service_user }}"
-  loop: "{{ witness_editable_python_paths }}"
-  when:
-    - witness_checkout_mode == 'source'
-    - not (ansible_check_mode and item in (witness_host_stale_checkout_paths | default([])))
+    - name: Install Python packages required for Circus
+      ansible.builtin.pip:
+        name: "{{ witness_python_packages }}"
+        executable: "{{ witness_pip_executable }}"
+      when:
+        - not ansible_check_mode
+        - witness_python_packages | length > 0
+
+    - name: Install editable local hio and keripy packages
+      ansible.builtin.pip:
+        name: "{{ item }}"
+        editable: true
+        executable: "{{ witness_pip_executable }}"
+      loop: "{{ witness_editable_python_paths }}"
+      when:
+        - not ansible_check_mode
+        - witness_checkout_mode == 'source'
 
 - name: Render run-keripy-witness wrapper
   ansible.builtin.template:

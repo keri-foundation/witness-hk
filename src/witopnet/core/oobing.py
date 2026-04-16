@@ -57,15 +57,15 @@ class OOBIEnd:
                     witness = self.witery.lookup(wits[0])
 
         if witness is None:
-            raise falcon.HTTPNotFound(description=f"winess for aid {aid} not found")
+            raise falcon.HTTPNotFound(description=f"witness for aid {aid} not found")
 
         if aid not in witness.hby.kevers:
             raise falcon.HTTPNotFound(description=f"aid {aid} not found")
 
         kever = witness.hby.kevers[aid]
-        db = getattr(witness.hby, "db", None)
-        if db is None:
-            raise falcon.HTTPNotFound(description=f"winess for aid {aid} not found")
+        db = witness.hby.db
+        if not db.opened:
+            raise falcon.HTTPNotFound(description=f"witness for aid {aid} not found")
 
         if not db.fullyWitnessed(kever.serder):
             raise falcon.HTTPNotFound(description=f"aid {aid} not found")

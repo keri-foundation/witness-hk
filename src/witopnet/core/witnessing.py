@@ -587,7 +587,9 @@ class WitnessResourceEnd:
 
         Raises:
             falcon.HTTPBadRequest: if ``eid`` is not a valid KERI prefix or
-                does not correspond to a known witness.
+                witness deletion fails validation.
+            falcon.HTTPNotFound: if ``eid`` does not correspond to a known
+                witness.
         """
         try:
             coring.Prefixer(qb64=eid)

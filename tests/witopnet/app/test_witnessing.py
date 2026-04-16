@@ -38,7 +38,7 @@ def test_oobi_closed_witness_db_returns_not_found():
     witness = SimpleNamespace(
         hby=SimpleNamespace(
             kevers={aid: SimpleNamespace(serder=MagicMock())},
-            db=None,
+            db=SimpleNamespace(opened=False),
             prefixes=set(),
             habs={},
         )

@@ -372,14 +372,13 @@ class Witnessery(doing.DoDoer):
                 f"Unable to delete witness, {eid} is not a valid witness identifier"
             )
 
-        witness = self.wits[eid]
+        witness = self.wits.pop(eid)
 
         aid = witness.aids[0]
         self.db.wits.rem(keys=(eid,))
         self.db.cids.rem(keys=(aid,), val=eid)
-        witness.hby.close(clear=True)
-
         self.remove([witness])
+        witness.hby.close(clear=True)
 
 
 class Witness(doing.DoDoer):
@@ -599,6 +598,8 @@ class WitnessResourceEnd:
 
         try:
             self.witery.deleteWitness(eid=eid)
+        except ValueError as e:
+            raise falcon.HTTPNotFound(description=e.args[0])
         except kering.ConfigurationError as e:
             raise falcon.HTTPBadRequest(description=e.args[0])
 

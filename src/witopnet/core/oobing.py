@@ -63,7 +63,11 @@ class OOBIEnd:
             raise falcon.HTTPNotFound(description=f"aid {aid} not found")
 
         kever = witness.hby.kevers[aid]
-        if not witness.hby.db.fullyWitnessed(kever.serder):
+        db = getattr(witness.hby, "db", None)
+        if db is None:
+            raise falcon.HTTPNotFound(description=f"winess for aid {aid} not found")
+
+        if not db.fullyWitnessed(kever.serder):
             raise falcon.HTTPNotFound(description=f"aid {aid} not found")
 
         owits = oset(kever.wits)

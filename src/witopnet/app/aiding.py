@@ -162,9 +162,11 @@ class AidCollectionEnd:
             else urls[kering.Schemes.https]
         )
         up = urlparse(url)
-        oobi = (
-            f"{up.scheme}://{up.hostname}:{up.port}/oobi/{witness.hab.pre}/controller"
-        )
+        if up.port is None:
+            endpoint = f"{up.scheme}://{up.hostname}"
+        else:
+            endpoint = f"{up.scheme}://{up.hostname}:{up.port}"
+        oobi = f"{endpoint}/oobi/{witness.hab.pre}/controller"
 
         body = dict(totp=cipher.qb64, oobi=oobi)
 

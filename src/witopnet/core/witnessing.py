@@ -25,8 +25,8 @@ from keri.core import coring, routing, eventing, parsing
 from keri.db.basing import BaserDoer
 from keri.help import helping
 from keri.peer import exchanging
-from keri.vdr import viring, verifying
-from keri.vdr.eventing import Tevery
+from keri.vdr import verifying
+from keri.vdr.eventing import Reger, Tevery
 
 from witopnet.app import indirecting, aiding
 from witopnet.app.indirecting import HttpEnd, ReceiptEnd, KeyStateEnd, KeyLogEnd
@@ -270,7 +270,7 @@ class Witnessery(doing.DoDoer):
         Called once during ``__init__``. Iterates over every :class:`~witopnet.core.basing.Wit`
         record in the database and creates a :class:`Witness` for each.
         """
-        for said, wit in self.db.wits.getItemIter():
+        for _keys, wit in self.db.wits.getTopItemIter():
             hby = habbing.Habery(
                 name=wit.name,
                 base=self.base,
@@ -415,7 +415,7 @@ class Witness(doing.DoDoer):
         cues = decking.Deck()
         doers = []
 
-        self.reger = viring.Reger(name=hab.name, db=hab.db, temp=False)
+        self.reger = Reger(name=hab.name, db=hab.db, temp=False)
         verfer = verifying.Verifier(hby=hby, reger=self.reger)
 
         self.mbx = storing.Mailboxer(name=hab.name, temp=hby.temp)

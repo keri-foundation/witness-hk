@@ -48,6 +48,7 @@ witopnet = "witopnet.app.cli.witopnet:main"
 dev = [
     "pytest",
     "black",
+    "pre-commit",
     "ruff",
 ]
 

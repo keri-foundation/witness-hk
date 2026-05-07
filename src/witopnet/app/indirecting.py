@@ -625,7 +625,7 @@ class ReceiptEnd:
 
         rep.set_header("Content-Type", "application/json+cesr")
         rep.status = falcon.HTTP_200
-        rep.data = rct
+        rep.data = bytes(rct)
 
 
 class KeyStateEnd:

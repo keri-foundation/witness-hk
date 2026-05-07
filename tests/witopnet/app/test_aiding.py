@@ -25,6 +25,62 @@ from witopnet.app import aiding, indirecting
 from witopnet.core import basing, witnessing
 
 
+def test_aids_uses_message_protocol_version(multipart):
+    """Regression: KERI10 CESR attachments must parse with the event's pvrsn.
+
+    Newer keripy defaults attachment decoding to CESR v2 unless ``version=`` is
+    supplied; without matching v1, controller sigs are dropped and /aids returns
+    ``KEL part not valid inception event``.
+    """
+    with (
+        habbing.openHab(name="bob", salt=b"0123456789fedbob") as (_, bobHab),
+        habbing.openHab(name="wan", transferable=False, salt=b"0123456789fedcba") as (
+            _,
+            wanHab,
+        ),
+    ):
+        url = "http://127.0.0.1:5642/"
+        msgs = bytearray()
+        msgs.extend(
+            wanHab.makeEndRole(
+                eid=wanHab.pre, role=kering.Roles.controller, stamp=helping.nowIso8601()
+            )
+        )
+        msgs.extend(
+            wanHab.makeLocScheme(
+                url=url, scheme=kering.Schemes.http, stamp=helping.nowIso8601()
+            )
+        )
+        wanHab.psr.parse(ims=msgs)
+
+        doist = doing.Doist(limit=1.0, tock=0.03125, real=True)
+        safe = basing.Baser(name=wanHab.name, temp=wanHab.temp)
+        witery = witnessing.Witnessery(db=safe, temp=wanHab.temp)
+        deeds = doist.enter(doers=[witery])
+        doist.recur(deeds=deeds)
+
+        app = falcon.App()
+        app.add_route("/witnesses", witnessing.WitnessCollectionEnd(witery))
+        aiding.loadEnds(app=app, witery=witery)
+        client = testing.TestClient(app)
+
+        rep = client.simulate_post(path="/witnesses", body=json.dumps({"aid": bobHab.pre}))
+        assert rep.status == falcon.HTTP_OK
+        bob_wit = rep.json["eid"]
+        witness = witery.wits[bob_wit]
+
+        kel = bobHab.makeOwnEvent(sn=0)
+        serder = serdering.SerderKERI(raw=kel)
+        assert kering.deversify(serder.ked["v"]).pvrsn.major == 1
+
+        body, headers = multipart.create(dict(kel=kel))
+        headers[CESR_DESTINATION_HEADER] = bob_wit
+        rep = client.simulate_post(path="/aids", body=body, headers=headers)
+        assert rep.status == falcon.HTTP_200
+        assert "totp" in rep.json and "oobi" in rep.json
+        assert bobHab.pre in witness.hab.kevers
+
+
 def test_encrypting_totp(multipart):
     with (
         habbing.openHab(name="bob", salt=b"0123456789fedbob") as (bobHby, bobHab),

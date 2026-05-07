@@ -64,7 +64,9 @@ def test_aids_uses_message_protocol_version(multipart):
         aiding.loadEnds(app=app, witery=witery)
         client = testing.TestClient(app)
 
-        rep = client.simulate_post(path="/witnesses", body=json.dumps({"aid": bobHab.pre}))
+        rep = client.simulate_post(
+            path="/witnesses", body=json.dumps({"aid": bobHab.pre})
+        )
         assert rep.status == falcon.HTTP_OK
         bob_wit = rep.json["eid"]
         witness = witery.wits[bob_wit]

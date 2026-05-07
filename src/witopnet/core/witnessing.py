@@ -435,7 +435,12 @@ class Witness(doing.DoDoer):
 
         tvy.registerReplyRoutes(router=rvy.rtr)
         self.parser = parsing.Parser(
-            framed=True, kvy=kvy, tvy=tvy, exc=exchanger, rvy=rvy
+            framed=True,
+            kvy=kvy,
+            tvy=tvy,
+            exc=exchanger,
+            rvy=rvy,
+            version=kering.Vrsn_1_0,
         )
 
         witStart = indirecting.WitnessStart(

@@ -7,7 +7,7 @@ Unit tests for KeyStateEnd and KeyLogEnd endpoint classes
 
 import falcon
 from falcon import testing
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 from keri.app.httping import CESR_DESTINATION_HEADER
 
 from witopnet.app.indirecting import KeyStateEnd, KeyLogEnd
@@ -60,6 +60,7 @@ class TestKeyStateEnd:
 
         # Setup database mock
         self.witness.hab.db = MagicMock()
+        self.witness.hab.db.wigs = MagicMock()
 
         # Create mock wigs (witness signatures)
         # Using valid CESR indexed signature format (0B prefix + 88 base64 chars)
@@ -67,7 +68,7 @@ class TestKeyStateEnd:
             b"0BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAg",
             b"0BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAh",
         ]
-        self.witness.hab.db.getWigs = MagicMock(return_value=self.mock_wigs)
+        self.witness.hab.db.wigs.get = MagicMock(return_value=self.mock_wigs)
 
         # Mock endorse method
         self.witness.hab.endorse = MagicMock(return_value=b"endorsed_data")
@@ -87,27 +88,22 @@ class TestKeyStateEnd:
         """Test successful key state query"""
         headers = {CESR_DESTINATION_HEADER: self.witness_aid}
 
-        # Mock core.Siger to avoid needing valid CESR bytes
-        with patch("witopnet.app.indirecting.core.Siger") as mock_siger:
-            mock_siger_instance = MagicMock()
-            mock_siger.return_value = mock_siger_instance
+        response = self.client.simulate_get(
+            "/ksn", query_string=f"pre={self.test_pre}", headers=headers
+        )
 
-            response = self.client.simulate_get(
-                "/ksn", query_string=f"pre={self.test_pre}", headers=headers
-            )
+        assert response.status == falcon.HTTP_200
+        assert response.headers["Content-Type"] == "application/cesr"
+        assert response.content == b"endorsed_data"
 
-            assert response.status == falcon.HTTP_200
-            assert response.headers["Content-Type"] == "application/cesr"
-            assert response.content == b"endorsed_data"
+        # Verify witery.lookup was called with correct AID
+        self.witery.lookup.assert_called_once_with(self.witness_aid)
 
-            # Verify witery.lookup was called with correct AID
-            self.witery.lookup.assert_called_once_with(self.witness_aid)
+        # Verify kever.state was called
+        self.kever.state.assert_called_once()
 
-            # Verify kever.state was called
-            self.kever.state.assert_called_once()
-
-            # Verify endorse was called
-            self.witness.hab.endorse.assert_called_once()
+        # Verify endorse was called
+        self.witness.hab.endorse.assert_called_once()
 
     def test_on_get_missing_destination_header(self):
         """Test request without CESR destination header"""
@@ -145,27 +141,23 @@ class TestKeyStateEnd:
 
     def test_on_get_insufficient_witness_receipts(self):
         """Test when witness receipts are insufficient"""
-        # Mock getWigs to return fewer signatures than required
-        self.witness.hab.db.getWigs = MagicMock(
+        # Mock wigs.get to return fewer signatures than required
+        self.witness.hab.db.wigs.get = MagicMock(
             return_value=[b"sig1"]
         )  # Only 1, need 2
 
         headers = {CESR_DESTINATION_HEADER: self.witness_aid}
 
-        # Mock core.Siger to avoid CESR parsing issues
-        with patch("witopnet.app.indirecting.core.Siger") as mock_siger:
-            mock_siger.return_value = MagicMock()
+        response = self.client.simulate_get(
+            "/ksn", query_string=f"pre={self.test_pre}", headers=headers
+        )
 
-            response = self.client.simulate_get(
-                "/ksn", query_string=f"pre={self.test_pre}", headers=headers
-            )
-
-            assert response.status == falcon.HTTP_404
-            assert "Witness receipts not found" in response.json["title"]
+        assert response.status == falcon.HTTP_404
+        assert "Witness receipts not found" in response.json["title"]
 
     def test_on_get_no_witness_receipts(self):
         """Test when there are no witness receipts at all"""
-        self.witness.hab.db.getWigs = MagicMock(return_value=[])
+        self.witness.hab.db.wigs.get = MagicMock(return_value=[])
 
         headers = {CESR_DESTINATION_HEADER: self.witness_aid}
         response = self.client.simulate_get(

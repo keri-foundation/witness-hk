@@ -13,14 +13,12 @@ import falcon
 import pyotp
 from hio.base import doing
 from hio.help import decking
-from keri import help, core
+from keri import help
 from keri.app import httping
 from keri.app.httping import CESR_DESTINATION_HEADER
 from keri.core import eventing, coring, serdering, counting
 from keri.core.coring import Ilks
 from keri.core.eventing import reply
-from keri.db import dbing
-from keri.db.dbing import dgKey
 from keri.help import helping
 
 logger = help.ogler.getLogger()
@@ -590,21 +588,18 @@ class ReceiptEnd:
             )
 
         if sn is not None:
-            said = witness.hab.db.getKeLast(key=dbing.snKey(pre=preb, sn=sn))
+            said = witness.hab.db.kels.getLast(keys=preb, on=sn)
 
         if said is None:
             raise falcon.HTTPNotFound(
                 description=f"event for {pre} at {sn} ({said}) not found"
             )
 
-        said = bytes(said)
-        dgkey = dbing.dgKey(preb, said)  # get message
-        if not (raw := witness.hab.db.getEvt(key=dgkey)):
+        saidb = said.encode("utf-8") if isinstance(said, str) else bytes(said)
+        if not (serder := witness.hab.db.evts.get(keys=(preb, saidb))):
             raise falcon.HTTPNotFound(
-                description="Missing event for dig={}.".format(said)
+                description="Missing event for dig={}.".format(saidb)
             )
-
-        serder = serdering.SerderKERI(raw=bytes(raw))
         if serder.sn > 0:
             wits = [
                 wit.qb64 for wit in witness.hab.kvy.fetchWitnessState(pre, serder.sn)
@@ -617,16 +612,16 @@ class ReceiptEnd:
                 description=f"{witness.hab.pre} is not a valid witness for {pre} event at "
                 f"{serder.sn}, {wits}"
             )
-        rserder = eventing.receipt(pre=pre, sn=sn, said=said.decode("utf-8"))
+        rserder = eventing.receipt(pre=pre, sn=sn, said=saidb.decode("utf-8"))
         rct = bytearray(rserder.raw)
-        if wigs := witness.hab.db.getWigs(key=dgkey):
+        if wigers := witness.hab.db.wigs.get(keys=(preb, saidb)):
             rct.extend(
                 counting.Counter(
-                    code=counting.CtrDex_1_0.WitnessIdxSigs, count=len(wigs)
+                    code=counting.CtrDex_1_0.WitnessIdxSigs, count=len(wigers)
                 ).qb64b
             )
-            for wig in wigs:
-                rct.extend(wig)
+            for wiger in wigers:
+                rct.extend(wiger.qb64b)
 
         rep.set_header("Content-Type", "application/json+cesr")
         rep.status = falcon.HTTP_200
@@ -676,8 +671,7 @@ class KeyStateEnd:
         kever = witness.hab.kevers[pre]
 
         # get list of witness signatures to ensure we are presenting a fully witnessed event
-        wigs = witness.hab.db.getWigs(dgKey(pre, kever.serder.saidb))  # list of wigs
-        wigers = [core.Siger(qb64b=bytes(wig)) for wig in wigs]
+        wigers = witness.hab.db.wigs.get(keys=(pre.encode("utf-8"), kever.serder.saidb))
 
         if len(wigers) < kever.toader.num:
             msg = f"Witness receipts not found error on event pre={pre}"

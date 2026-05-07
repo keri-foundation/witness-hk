@@ -842,7 +842,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "black", marker = "extra == 'dev'" },
-    { name = "falcon", specifier = ">=3.1.0" },
+    { name = "falcon", specifier = ">=4.2.0" },
     { name = "hio", specifier = ">=0.7.19" },
     { name = "keri", git = "https://github.com/WebOfTrust/keripy.git" },
     { name = "multicommand", specifier = ">=1.0.0" },

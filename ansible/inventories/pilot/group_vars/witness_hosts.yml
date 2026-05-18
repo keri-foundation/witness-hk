@@ -30,6 +30,7 @@ witness_circus_stats_endpoint: ipc:///var/run/keri-circus/stats.sock
 witness_circus_statsd: 0
 witness_stop_signal: TERM
 witness_graceful_timeout: 30
+witness_nofile_limit: 65536
 
 witness_system_packages:
   - git

@@ -9,7 +9,9 @@ factory function, the ``Witnessery`` manager, and the ``Witness`` doer that
 together implement the full lifecycle of a KERI witness service.
 """
 
+import errno
 import json
+import os
 from urllib.parse import urlsplit
 
 import falcon
@@ -33,6 +35,21 @@ from witopnet.app.indirecting import HttpEnd, ReceiptEnd, KeyStateEnd, KeyLogEnd
 from witopnet.core import httping, basing, oobing
 
 logger = help.ogler.getLogger()
+
+FD_EXHAUSTION_ERRNOS = {errno.EMFILE, errno.ENFILE}
+
+
+def _isFdExhaustion(exc):
+    seen = set()
+    current = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, OSError) and current.errno in FD_EXHAUSTION_ERRNOS:
+            return True
+        if "Too many open files" in str(current):
+            return True
+        current = current.__cause__ or current.__context__
+    return False
 
 
 def setup(
@@ -263,6 +280,36 @@ class Witnessery(doing.DoDoer):
         doers = list(self.wits.values())
 
         super(Witnessery, self).__init__(doers=doers, always=True)
+
+    def _logFdExhaustion(self, aid):
+        """Log process file descriptor state after an FD exhaustion failure."""
+        soft = None
+        hard = None
+        try:
+            import resource
+
+            soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        except (ImportError, OSError, ValueError):
+            pass
+
+        count = None
+        for path in ("/proc/self/fd", "/dev/fd"):
+            try:
+                count = sum(1 for name in os.listdir(path) if name.isdigit())
+                break
+            except OSError:
+                continue
+
+        headroom = None
+        if count is not None and soft is not None and 0 <= soft < 2**60:
+            headroom = max(soft - count, 0)
+
+        logger.exception(
+            "Witness provisioning failed due to file descriptor exhaustion: "
+            f"controller={aid} active_witnesses={len(self.wits)} "
+            f"fd_count={count} fd_soft_limit={soft} fd_hard_limit={hard} "
+            f"fd_headroom={headroom}"
+        )
 
     def reload(self):
         """Load all witness records from the database and instantiate Witness doers.
@@ -558,6 +605,14 @@ class WitnessCollectionEnd:
             witness = self.witery.createWitness(aid=aid)
         except kering.ConfigurationError as e:
             raise falcon.HTTPBadRequest(description=e.args[0])
+        except Exception as e:
+            if not _isFdExhaustion(e):
+                raise
+            self.witery._logFdExhaustion(aid)
+            raise falcon.HTTPServiceUnavailable(
+                title="Witness service unavailable",
+                description="Witness service file descriptor capacity exhausted.",
+            ) from e
 
         oobis = witness.oobis()
 

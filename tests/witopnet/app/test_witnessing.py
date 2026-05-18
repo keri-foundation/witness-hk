@@ -43,9 +43,7 @@ def test_fd_exhaustion_detection_handles_oserror_and_lmdb_text():
 
 def test_create_witness_fd_exhaustion_returns_service_unavailable():
     witery = MagicMock()
-    witery.createWitness.side_effect = RuntimeError(
-        "lmdb failure: Too many open files"
-    )
+    witery.createWitness.side_effect = RuntimeError("lmdb failure: Too many open files")
 
     endpoint = witnessing.WitnessCollectionEnd(witery=witery)
     app = falcon.App()

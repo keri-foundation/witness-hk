@@ -590,6 +590,8 @@ class WitnessCollectionEnd:
         Raises:
             falcon.HTTPBadRequest: if ``aid`` is missing from the request body
                 or is not a valid KERI prefix.
+            falcon.HTTPServiceUnavailable: if witness provisioning fails because
+                the service has exhausted file descriptor capacity.
         """
         body = req.get_media()
         aid = httping.getRequiredParam(body, "aid")

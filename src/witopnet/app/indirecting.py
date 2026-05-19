@@ -13,7 +13,7 @@ import falcon
 import pyotp
 from hio.base import doing
 from hio.help import decking
-from keri import help
+from keri import help, kering
 from keri.app import httping
 from keri.app.httping import CESR_DESTINATION_HEADER
 from keri.core import eventing, coring, serdering, counting
@@ -238,6 +238,7 @@ class HttpEnd:
         sadder = coring.Sadder(ked=cr.payload, kind=eventing.Kinds.json)
         msg = bytearray(sadder.raw)
         msg.extend(cr.attachments.encode("utf-8"))
+        pvrsn = kering.deversify(sadder.ked["v"]).pvrsn
 
         if (cipher := witness.getCode()) is not None:
 
@@ -247,14 +248,14 @@ class HttpEnd:
             if (auth := req.get_header("Authorization")) is not None and validCode(
                 scode, auth
             ):
-                witness.parser.parseOne(ims=msg, local=True)
+                witness.parser.parseOne(ims=msg, local=True, version=pvrsn)
             else:  # Otherwise this is not from a trusted source, so parse it as not "local"
                 witness.parser.parseOne(
-                    ims=msg, local=False
+                    ims=msg, local=False, version=pvrsn
                 )  # This will likely go to the misfit escrow
         else:
             witness.parser.parseOne(
-                ims=msg, local=False
+                ims=msg, local=False, version=pvrsn
             )  # This will likely go to the misfit escrow
 
         if sadder.proto in ("ACDC",):
@@ -521,15 +522,16 @@ class ReceiptEnd:
 
         msg = bytearray(serder.raw)
         msg.extend(cr.attachments.encode("utf-8"))
+        pvrsn = kering.deversify(serder.ked["v"]).pvrsn
 
         # Check for a one-time-password in the Authroizaiton header.  If it works, parse this as "local"
         if (auth := req.get_header("Authorization")) is not None and validCode(
             scode, auth
         ):
-            witness.parser.parseOne(ims=msg, local=True)
+            witness.parser.parseOne(ims=msg, local=True, version=pvrsn)
         else:  # Otherwise this is not form a trusted source, so parse it as not "local"
             witness.parser.parseOne(
-                ims=msg, local=False
+                ims=msg, local=False, version=pvrsn
             )  # This will likely go to the misfit escrow
 
         if pre in witness.hab.kevers and witness.hab.kevers[pre].sn == serder.sn:
@@ -544,7 +546,7 @@ class ReceiptEnd:
 
             rct = witness.hab.receipt(serder)
 
-            witness.parser.parseOne(bytes(rct))
+            witness.parser.parseOne(bytes(rct), version=pvrsn)
 
             saids = witness.hab.db.misfits.get(keys=(serder.pre, serder.snh))
             if saids:

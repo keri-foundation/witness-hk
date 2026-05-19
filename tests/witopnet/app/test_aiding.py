@@ -71,7 +71,7 @@ def test_aids_uses_message_protocol_version(multipart):
         bob_wit = rep.json["eid"]
         witness = witery.wits[bob_wit]
 
-        kel = bobHab.makeOwnEvent(sn=0)
+        kel = bobHab.msgOwnEvent(sn=0)
         serder = serdering.SerderKERI(raw=kel)
         assert kering.deversify(serder.ked["v"]).pvrsn.major == 1
 
@@ -132,7 +132,7 @@ def test_encrypting_totp(multipart):
         client = testing.TestClient(app)
 
         # Lets use EveHab's pre to start testing
-        msg = eveHab.makeOwnEvent(sn=0)
+        msg = eveHab.msgOwnEvent(sn=0)
         serder = serdering.SerderKERI(raw=msg)
         act = bytes(msg[serder.size :])
 
@@ -189,7 +189,7 @@ def test_encrypting_totp(multipart):
         }
 
         # Now try it with bobHab's pre that is in the whitelist
-        msg = bobHab.makeOwnEvent(sn=0)
+        msg = bobHab.msgOwnEvent(sn=0)
         serder = serdering.SerderKERI(raw=msg)
         act = bytes(msg[serder.size :])
         rep = client.simulate_post(
@@ -323,7 +323,7 @@ def test_receipts_integration(multipart):
         bob_wit = rep_w.json["eid"]
         witness = witery.wits[bob_wit]
 
-        icp = bobHab.makeOwnEvent(sn=0)
+        icp = bobHab.msgOwnEvent(sn=0)
         body, headers = multipart.create(dict(kel=icp))
         headers[CESR_DESTINATION_HEADER] = bob_wit
         rep_a = client.simulate_post(path="/aids", body=body, headers=headers)

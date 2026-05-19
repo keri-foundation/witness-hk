@@ -289,7 +289,7 @@ class Witnessery(doing.DoDoer):
             import resource
 
             soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
-        except (ImportError, OSError, ValueError):
+        except ImportError, OSError, ValueError:
             pass
 
         count = None

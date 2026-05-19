@@ -20,6 +20,7 @@ stderr_stream.class = FileStream
 stderr_stream.filename = {{ witness_stderr_log_path }}
 stop_signal = {{ witness_stop_signal }}
 graceful_timeout = {{ witness_graceful_timeout }}
+rlimit_nofile = {{ witness_nofile_limit }}
 
 [env:keripy-witness]
 KERIPY_HOME = {{ witness_keripy_home }}

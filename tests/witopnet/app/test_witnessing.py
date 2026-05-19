@@ -4,6 +4,7 @@ tests.app.test_witnessing module
 
 """
 
+import errno
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -11,6 +12,8 @@ import falcon
 from falcon import testing
 
 from witopnet.core import oobing, witnessing
+
+CONTROLLER_AID = "ENsqL5zLYNbZf0kcOlx-ioqNWlatD9rKZZM4hbEI7nza"
 
 
 def test_delete_witness_removes_registry_before_closing():
@@ -31,6 +34,27 @@ def test_delete_witness_removes_registry_before_closing():
     witery.db.cids.rem.assert_called_once_with(keys=("AID_1",), val="EID_1")
     witery.remove.assert_called_once_with([witness])
     witness.hby.close.assert_called_once_with(clear=True)
+
+
+def test_fd_exhaustion_detection_handles_oserror_and_lmdb_text():
+    assert witnessing._isFdExhaustion(OSError(errno.EMFILE, "Too many open files"))
+    assert witnessing._isFdExhaustion(RuntimeError("lmdb failure: Too many open files"))
+
+
+def test_create_witness_fd_exhaustion_returns_service_unavailable():
+    witery = MagicMock()
+    witery.createWitness.side_effect = RuntimeError("lmdb failure: Too many open files")
+
+    endpoint = witnessing.WitnessCollectionEnd(witery=witery)
+    app = falcon.App()
+    app.add_route("/witnesses", endpoint)
+    client = testing.TestClient(app)
+
+    response = client.simulate_post("/witnesses", json={"aid": CONTROLLER_AID})
+
+    assert response.status == falcon.HTTP_503
+    assert response.json["title"] == "Witness service unavailable"
+    witery._logFdExhaustion.assert_called_once_with(CONTROLLER_AID)
 
 
 def test_oobi_closed_witness_db_returns_not_found():

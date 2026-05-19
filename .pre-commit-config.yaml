@@ -1,0 +1,16 @@
+# Local hooks: run `uv run pre-commit install` once per clone (this repo only).
+# If you previously used core.hooksPath .githooks, run: git config --unset core.hooksPath
+default_language_version:
+  python: python3.14
+
+repos:
+  - repo: https://github.com/psf/black
+    rev: "26.3.1"
+    hooks:
+      - id: black
+        files: ^(src|tests)/.*\.py$
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.8
+    hooks:
+      - id: ruff-check

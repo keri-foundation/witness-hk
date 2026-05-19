@@ -10,7 +10,7 @@ from hio import help
 from hio.base import doing
 
 from keri.app import habbing, agenting, indirecting
-from keri.app.cli.common import existing, displaying
+from keri.cli.common import setupHby, printIdentifier
 
 logger = help.ogler.getLogger()
 
@@ -95,7 +95,7 @@ class InceptDoer(doing.DoDoer):
             force (bool): if True, re-submit witness receipts even when a full
                 complement already exists for the current event
         """
-        hby = existing.setupHby(name=name, base=base, bran=bran)
+        hby = setupHby(name=name, base=base, bran=bran)
         self.hbyDoer = habbing.HaberyDoer(habery=hby)  # setup doer
         self.mbx = indirecting.MailboxDirector(
             hby=hby, topics=["/receipt", "/replay", "/reply"]
@@ -132,7 +132,7 @@ class InceptDoer(doing.DoDoer):
             while not self.witDoer.cues:
                 _ = yield self.tock
 
-        displaying.printIdentifier(self.hby, hab.pre)
+        printIdentifier(self.hby, hab.pre)
 
         toRemove = [self.hbyDoer, self.witDoer, self.mbx]
         self.remove(toRemove)

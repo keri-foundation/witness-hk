@@ -40,6 +40,21 @@ cd witness-hk
 pip install -e ".[dev]"
 ```
 
+### Optional: install pre-commit hooks
+
+The CI pipeline will run Black and Ruff and will fail if there are any format or linting issues detected. If you want local commits to run the same formatting and lint checks before commit, install pre-commit hooks for this clone:
+
+```bash
+uv sync --extra dev
+uv run pre-commit install
+```
+
+Run hooks manually across the repository:
+
+```bash
+uv run pre-commit run --all-files
+```
+
 ## Configuration
 
 The witness server is configured via a KERI config file. A sample config is provided at `scripts/keri/cf/witopnet.json`:

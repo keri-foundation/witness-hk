@@ -56,7 +56,7 @@ class Baser(dbing.LMDBer):
         self.wits = koming.Komer(
             db=self,
             subkey="wits.",
-            schema=Wit,
+            klas=Wit,
         )
         # Controller AID to witness AID index
         self.cids = subing.IoSetSuber(db=self, subkey="cids.")

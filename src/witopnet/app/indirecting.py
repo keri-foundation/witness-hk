@@ -614,7 +614,14 @@ class ReceiptEnd:
                 description=f"{witness.hab.pre} is not a valid witness for {pre} event at "
                 f"{serder.sn}, {wits}"
             )
-        rserder = eventing.receipt(pre=pre, sn=sn, said=saidb.decode("utf-8"))
+        pvrsn = kering.deversify(serder.ked["v"]).pvrsn
+        rserder = eventing.receipt(
+            pre=pre,
+            sn=serder.sn,
+            said=saidb.decode("utf-8"),
+            pvrsn=pvrsn,
+            kind=eventing.Kinds.json,
+        )
         rct = bytearray(rserder.raw)
         if wigers := witness.hab.db.wigs.get(keys=(preb, saidb)):
             rct.extend(

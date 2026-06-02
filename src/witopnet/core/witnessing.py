@@ -107,9 +107,14 @@ def setup(
     Returns:
         list: doers ready to be passed to a :class:`hio.base.doing.Doist` event loop.
     """
-    db = basing.Baser(name="witopnet", base=base)
+    db = basing.Baser(
+        name="witopnet",
+        base=base,
+        temp=temp,
+        headDirPath=headDirPath,
+    )
     dbDoer = BaserDoer(db)
-    cf = configing.Configer(name=db.name, headDirPath=headDirPath)
+    cf = configing.Configer(name=db.name, headDirPath=headDirPath, temp=temp)
     qrycues = decking.Deck()
     witery = Witnessery(db=db, base=base, temp=temp, qrycues=qrycues, cf=cf)
 
@@ -279,7 +284,7 @@ class Witnessery(doing.DoDoer):
         self.reload()
         doers = list(self.wits.values())
 
-        super(Witnessery, self).__init__(doers=doers, always=True)
+        super(Witnessery, self).__init__(doers=doers, always=True, temp=self.temp)
 
     def _logFdExhaustion(self, aid):
         """Log process file descriptor state after an FD exhaustion failure."""
@@ -377,7 +382,11 @@ class Witnessery(doing.DoDoer):
 
         # We need to manage keys from an HSM here
         hby = habbing.Habery(
-            name=name, base=self.base, headDirPath=self.headPathDir, bran=None
+            name=name,
+            base=self.base,
+            temp=self.temp,
+            headDirPath=self.headPathDir,
+            bran=None,
         )
         hab = hby.makeHab(name=name, transferable=False)
         dt = helping.nowIso8601()
@@ -462,7 +471,7 @@ class Witness(doing.DoDoer):
         cues = decking.Deck()
         doers = []
 
-        self.reger = Reger(name=hab.name, db=hab.db, temp=False)
+        self.reger = Reger(name=hab.name, db=hab.db, temp=hby.temp)
         verfer = verifying.Verifier(hby=hby, reger=self.reger)
 
         self.mbx = storing.Mailboxer(name=hab.name, temp=hby.temp)
@@ -504,7 +513,7 @@ class Witness(doing.DoDoer):
         )
 
         doers.extend([rep, witStart, *oobiery.doers])
-        super(Witness, self).__init__(doers=doers, always=True)
+        super(Witness, self).__init__(doers=doers, always=True, temp=hby.temp)
 
     def enter(self, doers=None, *, temp=None):
         """Open the verifier registry before entering the doer loop.

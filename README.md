@@ -141,6 +141,8 @@ witopnet marshal submit \
 | `GET` | `/oobi/{aid}/{role}` | OOBI with role. |
 | `GET` | `/oobi/{aid}/{role}/{eid}` | OOBI with role and participant EID. |
 
+Generated KERI responses default to protocol version 2.0. For endpoints that generate reply material without an incoming KERI message to mirror, you can explicitly request v1 compatibility with either the `CESR-VERSION: 1.0` header or the `version=1.0` query parameter. This applies to `GET /receipts`, `GET /ksn`, and `GET /oobi/...`. Endpoints that receive a KERI message continue to honor the version declared by that incoming message.
+
 ## Scripts
 
 The `scripts/` directory contains shell scripts for local development and integration testing. All scripts that reference `${WITOPNET_SCRIPT_DIR}` require you to source `env.sh` first.

@@ -10,6 +10,7 @@ from unittest.mock import MagicMock
 
 import falcon
 from falcon import testing
+from keri import kering
 
 from witopnet.core import oobing, witnessing
 
@@ -78,6 +79,63 @@ def test_oobi_closed_witness_db_returns_not_found():
     response = client.simulate_get(f"/oobi/{aid}/controller")
 
     assert response.status == falcon.HTTP_404
+
+
+def test_oobi_defaults_to_v2_and_supports_explicit_v1_query_param():
+    aid = "EAID123"
+    calls = []
+
+    class FakeHab:
+        def replyToOobi(self, **kwa):
+            # Capture the exact version kwargs so this test checks endpoint
+            # policy directly instead of depending on serialized byte details
+            calls.append(kwa)
+            return bytearray(b"oobi")
+
+        def replay(self, aid):
+            return bytearray()
+
+    witness = SimpleNamespace(
+        hby=SimpleNamespace(
+            kevers={
+                aid: SimpleNamespace(
+                    serder=object(),
+                    prefixer=SimpleNamespace(qb64=aid),
+                    wits=[],
+                )
+            },
+            db=SimpleNamespace(opened=True, fullyWitnessed=lambda serder: True),
+            prefixes={aid},
+            habs={aid: FakeHab()},
+        )
+    )
+    witery = MagicMock()
+    witery.lookup.side_effect = lambda target: witness if target == aid else None
+    witery.db = SimpleNamespace(cids=SimpleNamespace(get=lambda keys: None))
+
+    endpoint = oobing.OOBIEnd(witery=witery)
+    app = falcon.App()
+    app.add_route("/oobi/{aid}/{role}", endpoint)
+    client = testing.TestClient(app)
+
+    response = client.simulate_get(f"/oobi/{aid}/controller")
+
+    assert response.status_code == 200
+
+    # Generated OOBIs are v2-first when the request does not pin a version
+    assert calls[0]["version"] == kering.Vrsn_2_0
+    assert calls[0]["pvrsn"] == kering.Vrsn_2_0
+
+    response = client.simulate_get(
+        f"/oobi/{aid}/controller",
+        query_string="version=1.0",
+    )
+
+    assert response.status_code == 200
+
+    # v1 Users can still force a v1 OOBI reply through the query string
+    assert calls[1]["version"] == kering.Vrsn_1_0
+    assert calls[1]["pvrsn"] == kering.Vrsn_1_0
 
 
 def test_delete_missing_witness_returns_not_found():

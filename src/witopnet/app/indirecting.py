@@ -20,8 +20,22 @@ from keri.core import eventing, coring, serdering, counting
 from keri.core.coring import Ilks
 from keri.core.eventing import reply
 from keri.help import helping
+from witopnet.core import httping as wit_httping
 
 logger = help.ogler.getLogger()
+
+
+def _messageVersion(serder):
+    """Return the protocol version declared by a KERI message."""
+    return kering.deversify(serder.ked["v"]).pvrsn
+
+
+def _witnessIdxSigCounterCode(version):
+    """Return the version-appropriate witness signature counter code."""
+    if version.major >= 2:
+        return counting.CtrDex_2_0.WitnessIdxSigs
+
+    return counting.CtrDex_1_0.WitnessIdxSigs
 
 
 class WitnessStart(doing.DoDoer):
@@ -238,7 +252,9 @@ class HttpEnd:
         sadder = coring.Sadder(ked=cr.payload, kind=eventing.Kinds.json)
         msg = bytearray(sadder.raw)
         msg.extend(cr.attachments.encode("utf-8"))
-        pvrsn = kering.deversify(sadder.ked["v"]).pvrsn
+        
+        # Get the message version for parsing
+        pvrsn = _messageVersion(sadder)
 
         if (cipher := witness.getCode()) is not None:
 
@@ -522,7 +538,9 @@ class ReceiptEnd:
 
         msg = bytearray(serder.raw)
         msg.extend(cr.attachments.encode("utf-8"))
-        pvrsn = kering.deversify(serder.ked["v"]).pvrsn
+
+        # Get message version
+        pvrsn = _messageVersion(serder)
 
         # Check for a one-time-password in the Authroizaiton header.  If it works, parse this as "local"
         if (auth := req.get_header("Authorization")) is not None and validCode(
@@ -544,7 +562,8 @@ class ReceiptEnd:
                     f"{serder.sn}: wits={wits}"
                 )
 
-            rct = witness.hab.receipt(serder)
+            # Generate the receipt with the correct version
+            rct = witness.hab.receipt(serder, version=pvrsn)
 
             witness.parser.parseOne(bytes(rct), version=pvrsn)
 
@@ -614,7 +633,7 @@ class ReceiptEnd:
                 description=f"{witness.hab.pre} is not a valid witness for {pre} event at "
                 f"{serder.sn}, {wits}"
             )
-        pvrsn = kering.deversify(serder.ked["v"]).pvrsn
+        pvrsn = wit_httping.requestVersion(req)
         rserder = eventing.receipt(
             pre=pre,
             sn=serder.sn,
@@ -626,7 +645,9 @@ class ReceiptEnd:
         if wigers := witness.hab.db.wigs.get(keys=(preb, saidb)):
             rct.extend(
                 counting.Counter(
-                    code=counting.CtrDex_1_0.WitnessIdxSigs, count=len(wigers)
+                    code=_witnessIdxSigCounterCode(pvrsn),
+                    count=len(wigers),
+                    version=pvrsn,
                 ).qb64b
             )
             for wiger in wigers:
@@ -689,7 +710,15 @@ class KeyStateEnd:
                 title="Witness receipts not found", description=msg
             )
 
-        rserder = reply(route=f"/ksn/{witness.hab.pre}", data=kever.state()._asdict())
+        pvrsn = wit_httping.requestVersion(req)
+        rserder = reply(
+            pre=witness.hab.pre,
+            route=f"/ksn/{witness.hab.pre}",
+            data=kever.state()._asdict(),
+            version=pvrsn,
+            pvrsn=pvrsn,
+            kind=eventing.Kinds.json,
+        )
 
         atc = witness.hab.endorse(rserder)
         rep.set_header("Content-Type", "application/cesr")

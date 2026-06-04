@@ -249,12 +249,15 @@ class HttpEnd:
         rep.set_header("connection", "close")
 
         cr = httping.parseCesrHttpRequest(req=req)
-        sadder = coring.Sadder(ked=cr.payload, kind=eventing.Kinds.json)
-        msg = bytearray(sadder.raw)
+
+        # Use SerderKERI to parse the message instead of Sadder to prevent version  
+        # reserialization to KERI VERSION variable
+        serder = serdering.SerderKERI(sad=cr.payload, kind=eventing.Kinds.json)
+        msg = bytearray(serder.raw)
         msg.extend(cr.attachments.encode("utf-8"))
         
         # Get the message version for parsing
-        pvrsn = _messageVersion(sadder)
+        pvrsn = _messageVersion(serder)
 
         if (cipher := witness.getCode()) is not None:
 
@@ -274,11 +277,11 @@ class HttpEnd:
                 ims=msg, local=False, version=pvrsn
             )  # This will likely go to the misfit escrow
 
-        if sadder.proto in ("ACDC",):
+        if serder.proto in ("ACDC",):
             rep.set_header("Content-Type", "application/json")
             rep.status = falcon.HTTP_204
         else:
-            ilk = sadder.ked["t"]
+            ilk = serder.ked["t"]
             if ilk in (
                 Ilks.icp,
                 Ilks.rot,
@@ -294,11 +297,11 @@ class HttpEnd:
                 rep.set_header("Content-Type", "application/json")
                 rep.status = falcon.HTTP_204
             elif ilk in (Ilks.qry,):
-                if sadder.ked["r"] in ("mbx",):
+                if serder.ked["r"] in ("mbx",):
                     rep.set_header("Content-Type", "text/event-stream")
                     rep.status = falcon.HTTP_200
                     rep.stream = QryRpyMailboxIterable(
-                        mbx=witness.mbx, cues=self.qrycues, said=sadder.said
+                        mbx=witness.mbx, cues=self.qrycues, said=serder.said
                     )
                 else:
                     rep.set_header("Content-Type", "application/json")

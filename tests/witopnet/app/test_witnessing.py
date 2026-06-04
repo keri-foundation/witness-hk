@@ -5,16 +5,36 @@ tests.app.test_witnessing module
 """
 
 import errno
+import json
+import re
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import falcon
 from falcon import testing
+from hio.base import doing
 from keri import kering
+from keri.app import habbing
+from keri.help import helping
 
-from witopnet.core import oobing, witnessing
+from witopnet.core import basing, oobing, witnessing
 
 CONTROLLER_AID = "ENsqL5zLYNbZf0kcOlx-ioqNWlatD9rKZZM4hbEI7nza"
+STREAM_MESSAGE_PATTERN = re.compile(rb'\{"v":"([^"]+)","t":"([^"]+)"')
+
+
+def _stream_messages(stream):
+    """Return `(version, ilk)` pairs for each JSON KERI message in a CESR stream.
+
+    OOBI responses concatenate JSON KERI bodies with CESR attachments, so this
+    helper inspects each serialized body directly instead of assuming the first
+    message tells the whole versioning story for the stream.
+    """
+    messages = []
+    for version, ilk in STREAM_MESSAGE_PATTERN.findall(stream):
+        messages.append((kering.deversify(version.decode("utf-8")).pvrsn, ilk.decode("utf-8")))
+
+    return messages
 
 
 def test_delete_witness_removes_registry_before_closing():
@@ -81,61 +101,90 @@ def test_oobi_closed_witness_db_returns_not_found():
     assert response.status == falcon.HTTP_404
 
 
-def test_oobi_defaults_to_v2_and_supports_explicit_v1_query_param():
-    aid = "EAID123"
-    calls = []
+def test_self_owned_oobi_replays_v2_kel_and_versions_reply_records_from_request():
+    """Self-owned OOBIs should keep replayed KEL events intact and reissue replies"""
 
-    class FakeHab:
-        def replyToOobi(self, **kwa):
-            # Capture the exact version kwargs so this test checks endpoint
-            # policy directly instead of depending on serialized byte details
-            calls.append(kwa)
-            return bytearray(b"oobi")
+    with habbing.openHab(
+        name="wan-oobi",
+        transferable=False,
+        salt=b"0123456789fedoob",
+        version=kering.Vrsn_2_0,
+    ) as (_, wanHab):
+        url = "http://127.0.0.1:5642/"
+        msgs = bytearray()
 
-        def replay(self, aid):
-            return bytearray()
-
-    witness = SimpleNamespace(
-        hby=SimpleNamespace(
-            kevers={
-                aid: SimpleNamespace(
-                    serder=object(),
-                    prefixer=SimpleNamespace(qb64=aid),
-                    wits=[],
-                )
-            },
-            db=SimpleNamespace(opened=True, fullyWitnessed=lambda serder: True),
-            prefixes={aid},
-            habs={aid: FakeHab()},
+        # Set up the witness and its OOBI endpoint
+        msgs.extend(
+            wanHab.makeEndRole(
+                eid=wanHab.pre,
+                role=kering.Roles.controller,
+                stamp=helping.nowIso8601(),
+                version=kering.Vrsn_2_0,
+            )
         )
-    )
-    witery = MagicMock()
-    witery.lookup.side_effect = lambda target: witness if target == aid else None
-    witery.db = SimpleNamespace(cids=SimpleNamespace(get=lambda keys: None))
+        msgs.extend(
+            wanHab.makeLocScheme(
+                url=url,
+                scheme=kering.Schemes.http,
+                stamp=helping.nowIso8601(),
+                version=kering.Vrsn_2_0,
+            )
+        )
+        
+        # Parse the records
+        wanHab.psr.parse(ims=msgs)
 
-    endpoint = oobing.OOBIEnd(witery=witery)
-    app = falcon.App()
-    app.add_route("/oobi/{aid}/{role}", endpoint)
-    client = testing.TestClient(app)
+        # Set up the doist and witery
+        doist = doing.Doist(limit=1.0, tock=0.03125, real=True)
+        safe = basing.Baser(name=wanHab.name, temp=wanHab.temp)
+        witery = witnessing.Witnessery(db=safe, temp=wanHab.temp)
+        deeds = doist.enter(doers=[witery])
+        doist.recur(deeds=deeds)
 
-    response = client.simulate_get(f"/oobi/{aid}/controller")
+        endpoint = oobing.OOBIEnd(witery=witery)
+        app = falcon.App()
+        app.add_route("/witnesses", witnessing.WitnessCollectionEnd(witery))
+        app.add_route("/oobi/{aid}", endpoint)
+        app.add_route("/oobi/{aid}/{role}", endpoint)
+        client = testing.TestClient(app)
 
-    assert response.status_code == 200
+        # Provision a witness identifier for wanHab
+        rep_w = client.simulate_post(
+            path="/witnesses", body=json.dumps({"aid": wanHab.pre})
+        )
+        assert rep_w.status == falcon.HTTP_OK
+        witness_aid = rep_w.json["eid"]
 
-    # Generated OOBIs are v2-first when the request does not pin a version
-    assert calls[0]["version"] == kering.Vrsn_2_0
-    assert calls[0]["pvrsn"] == kering.Vrsn_2_0
+        # Fetch the OOBI and assert it is successful and parse the messages
+        response = client.simulate_get(f"/oobi/{witness_aid}")
+        assert response.status_code == 200
+        messages = _stream_messages(response.content)
 
-    response = client.simulate_get(
-        f"/oobi/{aid}/controller",
-        query_string="version=1.0",
-    )
+        # Assert that the inception is v2
+        assert messages[0][1] == "icp"
+        assert messages[0][0] == kering.Vrsn_2_0
 
-    assert response.status_code == 200
+        # Assert that the reply records are all v2 by default
+        default_reply_versions = [version for version, ilk in messages if ilk == "rpy"]
+        assert default_reply_versions
+        assert all(version == kering.Vrsn_2_0 for version in default_reply_versions)
 
-    # v1 Users can still force a v1 OOBI reply through the query string
-    assert calls[1]["version"] == kering.Vrsn_1_0
-    assert calls[1]["pvrsn"] == kering.Vrsn_1_0
+        # Fetch the OOBI again with an explicit v1 request
+        response = client.simulate_get(
+            f"/oobi/{witness_aid}",
+            query_string="version=1.0",
+        )
+        assert response.status_code == 200
+        messages = _stream_messages(response.content)
+
+        # The replayed KEL stays untouched, but the witness-authored reply
+        # records should honor an explicit v1 request
+        assert messages[0][1] == "icp"
+        assert messages[0][0] == kering.Vrsn_2_0
+
+        v1_reply_versions = [version for version, ilk in messages if ilk == "rpy"]
+        assert v1_reply_versions
+        assert all(version == kering.Vrsn_1_0 for version in v1_reply_versions)
 
 
 def test_delete_missing_witness_returns_not_found():

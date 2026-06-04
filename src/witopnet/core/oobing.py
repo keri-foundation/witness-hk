@@ -14,6 +14,60 @@ from keri import kering
 from witopnet.core import httping
 
 
+def _versionedSelfOobi(hab, role, eids, pvrsn):
+    """Build an OOBI stream for a witness-owned identifier in the requested version.
+
+    The controller's replayed KEL is returned verbatim so stored events keep
+    their original wire version. The self-authored endpoint replies are rebuilt
+    on demand so `GET /oobi/...` can honor an explicit legacy v1 request
+
+    Parameters:
+        hab (Hab): Local habitat that owns the identifier being served.
+        role (str | None): Optional OOBI role filter from the request path.
+        eids (list[str]): Optional endpoint identifier filter from the request path.
+        pvrsn (Versionage): Requested KERI protocol version for fresh replies.
+
+    Returns:
+        bytearray: Replay plus freshly generated self-authored OOBI replies.
+    """
+    msgs = bytearray(hab.replay(hab.pre))
+
+    for (_, erole, eid), end in hab.db.ends.getTopItemIter(keys=(hab.pre,)):
+        if not (end.enabled or end.allowed):
+            continue
+        if role is not None and role != erole:
+            continue
+        if eids and eid not in eids:
+            continue
+
+        # Only regenerate location replies we are authoritative for; foreign
+        # endpoint locations must keep their originally authored bytes.
+        if eid == hab.pre:
+            msgs.extend(
+                hab.replyLocScheme(
+                    eid=eid,
+                    version=pvrsn,
+                    pvrsn=pvrsn,
+                    kind=eventing.Kinds.json,
+                )
+            )
+        else:
+            msgs.extend(hab.loadLocScheme(eid=eid))
+
+        msgs.extend(
+            hab.makeEndRole(
+                eid=eid,
+                role=erole,
+                allow=end.allowed,
+                version=pvrsn,
+                pvrsn=pvrsn,
+                kind=eventing.Kinds.json,
+            )
+        )
+
+    return msgs
+
+
 class OOBIEnd:
     """REST API for OOBI endpoints
 
@@ -77,11 +131,13 @@ class OOBIEnd:
         owits = oset(kever.wits)
         if kever.prefixer.qb64 in witness.hby.prefixes:  # One of our identifiers
             hab = witness.hby.habs[kever.prefixer.qb64]
+            own = True
         elif match := owits.intersection(
             witness.hby.prefixes
         ):  # We are a witness for identifier
             pre = match.pop()
             hab = witness.hby.habs[pre]
+            own = False
         else:  # Not allowed to respond
             raise falcon.HTTPNotAcceptable(description="invalid OOBI request")
 
@@ -89,24 +145,29 @@ class OOBIEnd:
         if eid:
             eids.append(eid)
 
-        msgs = hab.replyToOobi(
-            aid=aid,
-            role=role,
-            eids=eids,
-            version=pvrsn,
-            pvrsn=pvrsn,
-            kind=eventing.Kinds.json,
-        )
-        if not msgs and role is None:
+        if own and aid == hab.pre and role in (None, kering.Roles.controller):
+            # Rebuild self-authored controller metadata in the caller's
+            # requested version; the replayed KEL remains in its stored version
+            msgs = _versionedSelfOobi(hab=hab, role=role, eids=eids, pvrsn=pvrsn)
+        else:
             msgs = hab.replyToOobi(
                 aid=aid,
-                role=kering.Roles.witness,
+                role=role,
                 eids=eids,
                 version=pvrsn,
                 pvrsn=pvrsn,
                 kind=eventing.Kinds.json,
             )
-            msgs.extend(hab.replay(aid))
+            if not msgs and role is None:
+                msgs = hab.replyToOobi(
+                    aid=aid,
+                    role=kering.Roles.witness,
+                    eids=eids,
+                    version=pvrsn,
+                    pvrsn=pvrsn,
+                    kind=eventing.Kinds.json,
+                )
+                msgs.extend(hab.replay(aid))
 
         if msgs:
             rep.status = falcon.HTTP_200  # This is the default status

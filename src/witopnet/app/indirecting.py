@@ -16,7 +16,7 @@ from hio.help import decking
 from keri import help, kering
 from keri.app import httping
 from keri.app.httping import CESR_DESTINATION_HEADER
-from keri.core import eventing, coring, serdering, counting
+from keri.core import eventing, coring, serdering
 from keri.core.coring import Ilks
 from keri.core.eventing import reply
 from keri.help import helping
@@ -614,25 +614,30 @@ class ReceiptEnd:
                 description=f"{witness.hab.pre} is not a valid witness for {pre} event at "
                 f"{serder.sn}, {wits}"
             )
-        pvrsn = kering.deversify(serder.ked["v"]).pvrsn
+        receipting = dict(pvrsn=serder.pvrsn, kind=serder.kind)
+        if serder.gvrsn is not None:
+            receipting["gvrsn"] = serder.gvrsn
+
         rserder = eventing.receipt(
             pre=pre,
             sn=serder.sn,
-            said=saidb.decode("utf-8"),
-            pvrsn=pvrsn,
-            kind=eventing.Kinds.json,
+            said=serder.said,
+            **receipting,
         )
         rct = bytearray(rserder.raw)
         if wigers := witness.hab.db.wigs.get(keys=(preb, saidb)):
-            rct.extend(
-                counting.Counter(
-                    code=counting.CtrDex_1_0.WitnessIdxSigs, count=len(wigers)
-                ).qb64b
+            rct = eventing.messagize(
+                serder=rserder,
+                wigers=wigers,
+                framed=True,
+                gvrsn=kering.Vrsn_2_0,
             )
-            for wiger in wigers:
-                rct.extend(wiger.qb64b)
 
-        rep.set_header("Content-Type", "application/json+cesr")
+        rep.content_type = (
+            "application/json+cesr"
+            if rserder.kind == kering.Kinds.json
+            else "application/cesr"
+        )
         rep.status = falcon.HTTP_200
         rep.data = bytes(rct)
 

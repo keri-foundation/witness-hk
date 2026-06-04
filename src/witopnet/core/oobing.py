@@ -85,15 +85,25 @@ class OOBIEnd:
         if eid:
             eids.append(eid)
 
-        msgs = hab.replyToOobi(aid=aid, role=role, eids=eids)
+        replying = dict(pvrsn=kever.serder.pvrsn, kind=kever.serder.kind)
+        if kever.serder.gvrsn is not None:
+            replying["gvrsn"] = kever.serder.gvrsn
+
+        msgs = hab.replyToOobi(aid=aid, role=role, eids=eids, **replying)
         if not msgs and role is None:
-            msgs = hab.replyToOobi(aid=aid, role=kering.Roles.witness, eids=eids)
+            msgs = hab.replyToOobi(
+                aid=aid, role=kering.Roles.witness, eids=eids, **replying
+            )
             msgs.extend(hab.replay(aid))
 
         if msgs:
             rep.status = falcon.HTTP_200  # This is the default status
             rep.set_header(ending.OOBI_AID_HEADER, aid)
-            rep.content_type = "application/json+cesr"
+            rep.content_type = (
+                "application/json+cesr"
+                if kever.serder.kind == kering.Kinds.json
+                else "application/cesr"
+            )
             rep.data = bytes(msgs)
 
         else:

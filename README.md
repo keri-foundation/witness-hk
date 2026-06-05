@@ -141,7 +141,7 @@ witopnet marshal submit \
 | `GET` | `/oobi/{aid}/{role}` | OOBI with role. |
 | `GET` | `/oobi/{aid}/{role}/{eid}` | OOBI with role and participant EID. |
 
-Generated KERI responses default to protocol version 2.0. For endpoints that generate reply material without an incoming KERI message to mirror, you can explicitly request v1 compatibility with either the `CESR-VERSION: 1.0` header or the `version=1.0` query parameter. This applies to `GET /receipts`, `GET /ksn`, and `GET /oobi/...`. Endpoints that receive a KERI message continue to honor the version declared by that incoming message.
+Key-event ingress continues to honor the version declared by the incoming KERI message. `GET /receipts` reconstructs receipts from the stored event it proves, `GET /oobi/...` keeps freshly generated discovery reply records on legacy v1 JSON while replaying historical KEL events exactly as stored, and `GET /ksn` emits a fixed v2 current-state reply.
 
 ## Scripts
 

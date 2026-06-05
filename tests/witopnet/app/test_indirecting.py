@@ -107,7 +107,7 @@ class TestKeyStateEnd:
         self.witness.hab.endorse.assert_called_once()
 
     @patch("witopnet.app.indirecting.reply")
-    def test_on_get_defaults_generated_reply_to_v2(self, mock_reply):
+    def test_on_get_always_generates_v2_reply(self, mock_reply):
         mock_reply.return_value = MagicMock()
         headers = {CESR_DESTINATION_HEADER: self.witness_aid}
 
@@ -120,22 +120,6 @@ class TestKeyStateEnd:
         assert kwargs["version"] == kering.Vrsn_2_0
         assert kwargs["pvrsn"] == kering.Vrsn_2_0
 
-    @patch("witopnet.app.indirecting.reply")
-    def test_on_get_supports_explicit_v1_reply_version(self, mock_reply):
-        mock_reply.return_value = MagicMock()
-        headers = {
-            CESR_DESTINATION_HEADER: self.witness_aid,
-            "CESR-VERSION": "1.0",
-        }
-
-        response = self.client.simulate_get(
-            "/ksn", query_string=f"pre={self.test_pre}", headers=headers
-        )
-
-        assert response.status == falcon.HTTP_200
-        _, kwargs = mock_reply.call_args
-        assert kwargs["version"] == kering.Vrsn_1_0
-        assert kwargs["pvrsn"] == kering.Vrsn_1_0
 
     def test_on_get_missing_destination_header(self):
         """Test request without CESR destination header"""

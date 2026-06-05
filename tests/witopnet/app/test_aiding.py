@@ -453,7 +453,7 @@ def test_encrypting_totp(multipart):
 
 
 def test_receipts_integration(multipart):
-    """GET /receipts after a witnessed rotation: pre+sn, pre+said, parsed receipt body, witness.parser.version."""
+    """GET /receipts should mirror the stored event's version and attachments."""
     with (
         habbing.openHab(name="bob", salt=b"0123456789fedbob") as (_, bobHab),
         habbing.openHab(name="wan", transferable=False, salt=b"0123456789fedcba") as (
@@ -538,13 +538,10 @@ def test_receipts_integration(multipart):
         assert kering.deversify(rct_sn.ked["v"]).pvrsn.major == 2
         assert len(rep_g1.content) > len(rct_sn.raw)
         atc_sn = rep_g1.content[len(rct_sn.raw) :]
-        assert atc_sn.startswith(
-            counting.Counter(
-                code=counting.CtrDex_2_0.WitnessIdxSigs,
-                count=len(row_wigs),
-                version=kering.Vrsn_2_0,
-            ).qb64b
-        )
+        # v2 witness signature framing encloses the indexed signatures, so the
+        # counter length reflects the encoded group size rather than just the
+        # number of witness signatures. Assert the counter code directly.
+        assert counting.Counter(qb64b=atc_sn).code == counting.CtrDex_2_0.WitnessIdxSigs
 
         rep_g2 = client.simulate_get(
             "/receipts",
@@ -558,26 +555,87 @@ def test_receipts_integration(multipart):
         assert kering.deversify(rct_said.ked["v"]).pvrsn.major == 2
         assert len(rep_g2.content) > len(rct_said.raw)
 
-        hdrs_v1 = {
-            CESR_DESTINATION_HEADER: bob_wit,
-            "CESR-VERSION": "1.0",
-        }
-        rep_g3 = client.simulate_get(
+def test_receipts_get_uses_stored_v1_event_version(multipart):
+    """Receipt lookup should keep a v1 body while using modern v2 attachments."""
+    with (
+        habbing.openHab(name="bob-v1", salt=b"0123456789febov1") as (_, bobHab),
+        habbing.openHab(name="wan-v1", transferable=False, salt=b"0123456789fecbv1") as (
+            _,
+            wanHab,
+        ),
+    ):
+        url = "http://127.0.0.1:5642/"
+        msgs = bytearray()
+        msgs.extend(
+            wanHab.makeEndRole(
+                eid=wanHab.pre, role=kering.Roles.controller, stamp=helping.nowIso8601()
+            )
+        )
+        msgs.extend(
+            wanHab.makeLocScheme(
+                url=url, scheme=kering.Schemes.http, stamp=helping.nowIso8601()
+            )
+        )
+        wanHab.psr.parse(ims=msgs)
+
+        doist = doing.Doist(limit=1.0, tock=0.03125, real=True)
+        safe = basing.Baser(name=wanHab.name, temp=wanHab.temp)
+        witery = witnessing.Witnessery(db=safe, temp=wanHab.temp)
+        deeds = doist.enter(doers=[witery])
+        doist.recur(deeds=deeds)
+
+        app = falcon.App()
+        app.add_route("/witnesses", witnessing.WitnessCollectionEnd(witery))
+        aiding.loadEnds(app=app, witery=witery)
+        receipt_end = indirecting.ReceiptEnd(witery=witery, aids=[bobHab.pre])
+        app.add_route("/receipts", receipt_end)
+        client = testing.TestClient(app)
+
+        rep_w = client.simulate_post(
+            path="/witnesses", body=json.dumps({"aid": bobHab.pre})
+        )
+        assert rep_w.status == falcon.HTTP_OK
+        bob_wit = rep_w.json["eid"]
+        witness = witery.wits[bob_wit]
+
+        # Enroll Bob and recover the TOTP needed for authenticated receipting.
+        icp = bobHab.msgOwnEvent(sn=0)
+        body, headers = multipart.create(dict(kel=icp))
+        headers[CESR_DESTINATION_HEADER] = bob_wit
+        rep_a = client.simulate_post(path="/aids", body=body, headers=headers)
+        assert rep_a.status == falcon.HTTP_200
+        code = rep_a.json["totp"]
+        m = coring.Matter(qb64=code)
+        rcode = coring.Matter(qb64=bobHab.decrypt(m.raw)).raw
+        totp = pyotp.TOTP(rcode)
+
+        # Submit a default v1 rotation and then fetch the stored receipt back.
+        rot = bobHab.rotate(adds=[bob_wit])
+        rot_serder = serdering.SerderKERI(raw=rot)
+        rep_p = _simulate_cesr_post(
+            client,
+            path="/receipts",
+            msg=rot,
+            destination=bob_wit,
+            headers={"Authorization": f"{totp.now()}#{helping.nowIso8601()}"},
+        )
+        assert rep_p.status == falcon.HTTP_200
+
+        row_wigs = witness.hab.db.wigs.get(keys=(bobHab.pre.encode("utf-8"), rot_serder.saidb))
+        assert len(row_wigs) >= 1
+
+        rep_g = client.simulate_get(
             "/receipts",
             query_string=f"pre={bobHab.pre}&sn=1",
-            headers=hdrs_v1,
+            headers={CESR_DESTINATION_HEADER: bob_wit},
         )
-        assert rep_g3.status == falcon.HTTP_200
-        rct_v1 = serdering.SerderKERI(raw=rep_g3.content)
-        assert kering.deversify(rct_v1.ked["v"]).pvrsn.major == 1
-        atc_v1 = rep_g3.content[len(rct_v1.raw) :]
-        assert atc_v1.startswith(
-            counting.Counter(
-                code=counting.CtrDex_1_0.WitnessIdxSigs,
-                count=len(row_wigs),
-                version=kering.Vrsn_1_0,
-            ).qb64b
-        )
+        assert rep_g.status == falcon.HTTP_200
+        rct = serdering.SerderKERI(raw=rep_g.content)
+        assert kering.deversify(rct.ked["v"]).pvrsn.major == 1
+        atc = rep_g.content[len(rct.raw) :]
+        # The receipt body stays v1 because the event was v1, but generated
+        # witness signature framing moves forward on the v2 format
+        assert counting.Counter(qb64b=atc).code == counting.CtrDex_2_0.WitnessIdxSigs
 
 
 def test_receipts_post_v2_returns_v2(multipart):
@@ -759,9 +817,7 @@ def test_ksn_get_serializes_body_and_attachment_frame_in_requested_version(multi
         )
         assert rep_r.status == falcon.HTTP_200
 
-        # Ask /ksn for the default response first. The service should emit a
-        # v2 reply body and a v2 attachment-group counter because generated
-        # responses are v2-first unless the user explicitly requests v1
+        # Submit a ksn query to the witness
         headers = {CESR_DESTINATION_HEADER: bob_wit}
         req = testing.create_req(
             path="/ksn",
@@ -786,23 +842,3 @@ def test_ksn_get_serializes_body_and_attachment_frame_in_requested_version(multi
         
         # Assert the attachment group is v2
         assert counting.Counter(qb64b=atc).code == counting.CtrDex_2_0.AttachmentGroup
-
-        # Then repeat the same query with an explicit v1 request and assert
-        # that both the body version and the attachment framing switch to v1
-        headers["CESR-VERSION"] = "1.0"
-        req = testing.create_req(
-            path="/ksn",
-            query_string=f"pre={bobHab.pre}",
-            headers=headers,
-        )
-        rep = falcon.Response()
-        ksn_end.on_get(req, rep)
-        assert rep.status == falcon.HTTP_200
-
-        rpy = serdering.SerderKERI(raw=bytes(rep.data))
-        assert rpy.ked["t"] == "rpy"
-        assert kering.deversify(rpy.ked["v"]).pvrsn == kering.Vrsn_1_0
-
-        atc = bytearray(bytes(rep.data)[len(rpy.raw) :])
-        assert atc
-        assert counting.Counter(qb64b=atc).code == counting.CtrDex_1_0.AttachmentGroup

@@ -390,9 +390,14 @@ class Witnessery(doing.DoDoer):
             version=kering.Vrsn_2_0,
             bran=None,
         )
-        # Pass the version inside makeHab to ensure inception is v2 first
-        # This would be unecessary once keripy VERSION defaults to v2
-        hab = hby.makeHab(name=name, transferable=False, version=kering.Vrsn_2_0)
+        # Pass both version and kind so the witness inception event is emitted
+        # as v2 CESR instead of inheriting Hab's older v1 JSON default.
+        hab = hby.makeHab(
+            name=name,
+            transferable=False,
+            version=kering.Vrsn_2_0,
+            kind=eventing.Kinds.cesr,
+        )
         dt = helping.nowIso8601()
 
         msgs = bytearray()

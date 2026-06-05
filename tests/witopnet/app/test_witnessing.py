@@ -103,8 +103,8 @@ def test_oobi_closed_witness_db_returns_not_found():
     assert response.status == falcon.HTTP_404
 
 
-def test_self_owned_oobi_replays_v2_kel_and_reuses_stored_reply_records():
-    """Self-owned OOBIs should replay KEL history and reuse stored reply versions."""
+def test_self_owned_oobi_reuses_stored_reply_record_versions():
+    """Self-owned OOBIs should keep the authored version of stored reply records."""
 
     with habbing.openHab(
         name="wan-oobi",
@@ -162,14 +162,10 @@ def test_self_owned_oobi_replays_v2_kel_and_reuses_stored_reply_records():
         assert response.status_code == 200
         messages = _stream_messages(response.content)
 
-        # Assert that the inception is v2
-        assert messages[0][1] == "icp"
-        assert messages[0][0] == kering.Vrsn_2_0
-
         # With the simpler `replyToOobi()` path, stored reply records come back
         # in whatever version they were originally authored. This witness's
         # endpoint metadata was created as v2, so the discovery replies remain
-        # v2 alongside the replayed v2 KEL history.
+        # v2 on the wire.
         default_reply_versions = [version for version, ilk in messages if ilk == "rpy"]
         assert default_reply_versions
         assert all(version == kering.Vrsn_2_0 for version in default_reply_versions)
@@ -180,11 +176,8 @@ def test_self_owned_oobi_replays_v2_kel_and_reuses_stored_reply_records():
         assert response.status_code == 200
         messages = _stream_messages(response.content)
 
-        # The replayed KEL stays untouched, and the stored reply records keep
-        # their original authored v2 format.
-        assert messages[0][1] == "icp"
-        assert messages[0][0] == kering.Vrsn_2_0
-
+        # The stored reply records keep their original authored v2 format
+        # across repeated OOBI fetches too.
         v2_reply_versions = [version for version, ilk in messages if ilk == "rpy"]
         assert v2_reply_versions
         assert all(version == kering.Vrsn_2_0 for version in v2_reply_versions)

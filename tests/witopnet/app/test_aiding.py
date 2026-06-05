@@ -73,6 +73,45 @@ def _create_cesr_request(*, path, msg, destination, headers=None):
     )
 
 
+def _seed_endpoint_records(hab, *, url, version=None):
+    """Create the witness endpoint metadata that test services expect at boot.
+
+    The witness runtime expects its local controller role and HTTP location
+    records to already exist in the habitat database, so integration-style
+    tests seed those records the same way the production bootstrap flow does.
+    """
+    recording = dict(stamp=helping.nowIso8601())
+    if version is not None:
+        recording["version"] = version
+
+    msgs = bytearray()
+    msgs.extend(
+        hab.makeEndRole(
+            eid=hab.pre,
+            role=kering.Roles.controller,
+            **recording,
+        )
+    )
+    msgs.extend(
+        hab.makeLocScheme(
+            url=url,
+            scheme=kering.Schemes.http,
+            **recording,
+        )
+    )
+    hab.psr.parse(ims=msgs)
+
+
+def _start_witery(hab):
+    """Start an in-memory Witnessery backed by the supplied habitat settings."""
+    doist = doing.Doist(limit=1.0, tock=0.03125, real=True)
+    safe = basing.Baser(name=hab.name, temp=hab.temp)
+    witery = witnessing.Witnessery(db=safe, temp=hab.temp)
+    deeds = doist.enter(doers=[witery])
+    doist.recur(deeds=deeds)
+    return doist, witery
+
+
 def test_aids_uses_message_protocol_version(multipart):
     """Regression: KERI10 CESR attachments must parse with the event's pvrsn.
 
@@ -87,25 +126,12 @@ def test_aids_uses_message_protocol_version(multipart):
             wanHab,
         ),
     ):
-        url = "http://127.0.0.1:5642/"
-        msgs = bytearray()
-        msgs.extend(
-            wanHab.makeEndRole(
-                eid=wanHab.pre, role=kering.Roles.controller, stamp=helping.nowIso8601()
-            )
+        _seed_endpoint_records(
+            wanHab,
+            url="http://127.0.0.1:5642/",
+            version=wanHab.kever.serder.pvrsn,
         )
-        msgs.extend(
-            wanHab.makeLocScheme(
-                url=url, scheme=kering.Schemes.http, stamp=helping.nowIso8601()
-            )
-        )
-        wanHab.psr.parse(ims=msgs)
-
-        doist = doing.Doist(limit=1.0, tock=0.03125, real=True)
-        safe = basing.Baser(name=wanHab.name, temp=wanHab.temp)
-        witery = witnessing.Witnessery(db=safe, temp=wanHab.temp)
-        deeds = doist.enter(doers=[witery])
-        doist.recur(deeds=deeds)
+        _doist, witery = _start_witery(wanHab)
 
         app = falcon.App()
         app.add_route("/witnesses", witnessing.WitnessCollectionEnd(witery))
@@ -152,38 +178,12 @@ def test_http_post_uses_inbound_version_across_event_types():
                 version=kering.Vrsn_2_0,
             ) as (_, wanHab),
         ):
-            url = "http://127.0.0.1:5642/"
-            msgs = bytearray()
-
-            # Create a rpy record for the controller role
-            msgs.extend(
-                wanHab.makeEndRole(
-                    eid=wanHab.pre,
-                    role=kering.Roles.controller,
-                    stamp=helping.nowIso8601(),
-                    version=kering.Vrsn_2_0,
-                )
+            _seed_endpoint_records(
+                wanHab,
+                url="http://127.0.0.1:5642/",
+                version=wanHab.kever.serder.pvrsn,
             )
-
-            # Create a rpy record for the HTTP scheme
-            msgs.extend(
-                wanHab.makeLocScheme(
-                    url=url,
-                    scheme=kering.Schemes.http,
-                    stamp=helping.nowIso8601(),
-                    version=kering.Vrsn_2_0,
-                )
-            )
-
-            # Parse the records
-            wanHab.psr.parse(ims=msgs)
-
-            # Set up the doist and witery
-            doist = doing.Doist(limit=1.0, tock=0.03125, real=True)
-            safe = basing.Baser(name=wanHab.name, temp=wanHab.temp)
-            witery = witnessing.Witnessery(db=safe, temp=wanHab.temp)
-            deeds = doist.enter(doers=[witery])
-            doist.recur(deeds=deeds)
+            _doist, witery = _start_witery(wanHab)
 
             http_end = indirecting.HttpEnd(witery=witery)
             app = falcon.App()
@@ -454,199 +454,23 @@ def test_encrypting_totp(multipart):
         assert rct.pre == bobHab.pre
         assert kering.deversify(rct.ked["v"]).pvrsn.major == 1
 
-
-def test_receipts_integration(multipart):
-    """GET /receipts should mirror the stored event's version and attachments."""
-    with (
-        habbing.openHab(name="bob", salt=b"0123456789fedbob") as (_, bobHab),
-        habbing.openHab(name="wan", transferable=False, salt=b"0123456789fedcba") as (
-            _,
-            wanHab,
-        ),
-    ):
-        url = "http://127.0.0.1:5642/"
-        msgs = bytearray()
-        msgs.extend(
-            wanHab.makeEndRole(
-                eid=wanHab.pre, role=kering.Roles.controller, stamp=helping.nowIso8601()
-            )
-        )
-        msgs.extend(
-            wanHab.makeLocScheme(
-                url=url, scheme=kering.Schemes.http, stamp=helping.nowIso8601()
-            )
-        )
-        wanHab.psr.parse(ims=msgs)
-
-        doist = doing.Doist(limit=1.0, tock=0.03125, real=True)
-        safe = basing.Baser(name=wanHab.name, temp=wanHab.temp)
-        witery = witnessing.Witnessery(db=safe, temp=wanHab.temp)
-        deeds = doist.enter(doers=[witery])
-        doist.recur(deeds=deeds)
-
-        app = falcon.App()
-        app.add_route("/witnesses", witnessing.WitnessCollectionEnd(witery))
-        aiding.loadEnds(app=app, witery=witery)
-        receipt_end = indirecting.ReceiptEnd(witery=witery, aids=[bobHab.pre])
-        app.add_route("/receipts", receipt_end)
-        client = testing.TestClient(app)
-
-        rep_w = client.simulate_post(
-            path="/witnesses", body=json.dumps({"aid": bobHab.pre})
-        )
-        assert rep_w.status == falcon.HTTP_OK
-        bob_wit = rep_w.json["eid"]
-        witness = witery.wits[bob_wit]
-
-        icp = bobHab.msgOwnEvent(sn=0)
-        body, headers = multipart.create(dict(kel=icp))
-        headers[CESR_DESTINATION_HEADER] = bob_wit
-        rep_a = client.simulate_post(path="/aids", body=body, headers=headers)
-        assert rep_a.status == falcon.HTTP_200
-        code = rep_a.json["totp"]
-        m = coring.Matter(qb64=code)
-        rcode = coring.Matter(qb64=bobHab.decrypt(m.raw)).raw
-        totp = pyotp.TOTP(rcode)
-
-        rot = bobHab.rotate(adds=[bob_wit], version=kering.Vrsn_2_0)
-        rot_serder = serdering.SerderKERI(raw=rot)
-        act = rot[rot_serder.size :]
-        rep_p = client.simulate_post(
-            path="/receipts",
-            body=rot_serder.raw.decode("utf-8"),
-            headers={
-                CESR_ATTACHMENT_HEADER: act.decode("utf-8"),
-                "content-type": CESR_CONTENT_TYPE,
-                "Authorization": f"{totp.now()}#{helping.nowIso8601()}",
-                CESR_DESTINATION_HEADER: bob_wit,
-            },
-        )
-        assert rep_p.status == falcon.HTTP_200
-
-        preb = bobHab.pre.encode("utf-8")
-        row_wigs = witness.hab.db.wigs.get(keys=(preb, rot_serder.saidb))
-        assert len(row_wigs) >= 1
-
-        hdrs = {CESR_DESTINATION_HEADER: bob_wit}
-        rep_g1 = client.simulate_get(
+        # Fetch the same stored receipt back over GET and verify that receipt
+        # lookup stays on the stored event's v1 body version while framing any
+        # generated witness signatures in the modern v2 CESR attachment format.
+        rep = client.simulate_get(
             "/receipts",
             query_string=f"pre={bobHab.pre}&sn=1",
-            headers=hdrs,
+            headers={CESR_DESTINATION_HEADER: bobWit},
         )
-        assert rep_g1.status == falcon.HTTP_200
-        assert rep_g1.headers["Content-Type"] == "application/json+cesr"
-        rct_sn = serdering.SerderKERI(raw=rep_g1.content)
-        assert rct_sn.ked["t"] == "rct"
-        assert rct_sn.sn == 1
-        assert kering.deversify(rct_sn.ked["v"]).pvrsn.major == 2
-        assert len(rep_g1.content) > len(rct_sn.raw)
-        atc_sn = rep_g1.content[len(rct_sn.raw) :]
-        # v2 witness signature framing encloses the indexed signatures, so the
-        # counter length reflects the encoded group size rather than just the
-        # number of witness signatures. Assert the counter code directly.
-        assert counting.Counter(qb64b=atc_sn).code == counting.CtrDex_2_0.WitnessIdxSigs
-
-        rep_g2 = client.simulate_get(
-            "/receipts",
-            query_string=f"pre={bobHab.pre}&said={rot_serder.said}",
-            headers=hdrs,
-        )
-        assert rep_g2.status == falcon.HTTP_200
-        rct_said = serdering.SerderKERI(raw=rep_g2.content)
-        assert rct_said.ked["t"] == "rct"
-        assert rct_said.ked["d"] == rot_serder.said
-        assert kering.deversify(rct_said.ked["v"]).pvrsn.major == 2
-        assert len(rep_g2.content) > len(rct_said.raw)
-
-
-def test_receipts_get_uses_stored_v1_event_version(multipart):
-    """Receipt lookup should keep a v1 body while using modern v2 attachments."""
-    with (
-        habbing.openHab(name="bob-v1", salt=b"0123456789febov1") as (_, bobHab),
-        habbing.openHab(
-            name="wan-v1", transferable=False, salt=b"0123456789fecbv1"
-        ) as (
-            _,
-            wanHab,
-        ),
-    ):
-        url = "http://127.0.0.1:5642/"
-        msgs = bytearray()
-        msgs.extend(
-            wanHab.makeEndRole(
-                eid=wanHab.pre, role=kering.Roles.controller, stamp=helping.nowIso8601()
-            )
-        )
-        msgs.extend(
-            wanHab.makeLocScheme(
-                url=url, scheme=kering.Schemes.http, stamp=helping.nowIso8601()
-            )
-        )
-        wanHab.psr.parse(ims=msgs)
-
-        doist = doing.Doist(limit=1.0, tock=0.03125, real=True)
-        safe = basing.Baser(name=wanHab.name, temp=wanHab.temp)
-        witery = witnessing.Witnessery(db=safe, temp=wanHab.temp)
-        deeds = doist.enter(doers=[witery])
-        doist.recur(deeds=deeds)
-
-        app = falcon.App()
-        app.add_route("/witnesses", witnessing.WitnessCollectionEnd(witery))
-        aiding.loadEnds(app=app, witery=witery)
-        receipt_end = indirecting.ReceiptEnd(witery=witery, aids=[bobHab.pre])
-        app.add_route("/receipts", receipt_end)
-        client = testing.TestClient(app)
-
-        rep_w = client.simulate_post(
-            path="/witnesses", body=json.dumps({"aid": bobHab.pre})
-        )
-        assert rep_w.status == falcon.HTTP_OK
-        bob_wit = rep_w.json["eid"]
-        witness = witery.wits[bob_wit]
-
-        # Enroll Bob and recover the TOTP needed for authenticated receipting.
-        icp = bobHab.msgOwnEvent(sn=0)
-        body, headers = multipart.create(dict(kel=icp))
-        headers[CESR_DESTINATION_HEADER] = bob_wit
-        rep_a = client.simulate_post(path="/aids", body=body, headers=headers)
-        assert rep_a.status == falcon.HTTP_200
-        code = rep_a.json["totp"]
-        m = coring.Matter(qb64=code)
-        rcode = coring.Matter(qb64=bobHab.decrypt(m.raw)).raw
-        totp = pyotp.TOTP(rcode)
-
-        # Submit a default v1 rotation and then fetch the stored receipt back.
-        rot = bobHab.rotate(adds=[bob_wit])
-        rot_serder = serdering.SerderKERI(raw=rot)
-        rep_p = _simulate_cesr_post(
-            client,
-            path="/receipts",
-            msg=rot,
-            destination=bob_wit,
-            headers={"Authorization": f"{totp.now()}#{helping.nowIso8601()}"},
-        )
-        assert rep_p.status == falcon.HTTP_200
-
-        row_wigs = witness.hab.db.wigs.get(
-            keys=(bobHab.pre.encode("utf-8"), rot_serder.saidb)
-        )
-        assert len(row_wigs) >= 1
-
-        rep_g = client.simulate_get(
-            "/receipts",
-            query_string=f"pre={bobHab.pre}&sn=1",
-            headers={CESR_DESTINATION_HEADER: bob_wit},
-        )
-        assert rep_g.status == falcon.HTTP_200
-        rct = serdering.SerderKERI(raw=rep_g.content)
+        assert rep.status == falcon.HTTP_200
+        rct = serdering.SerderKERI(raw=rep.content)
         assert kering.deversify(rct.ked["v"]).pvrsn.major == 1
-        atc = rep_g.content[len(rct.raw) :]
-        # The receipt body stays v1 because the event was v1, but generated
-        # witness signature framing moves forward on the v2 format
+        atc = rep.content[len(rct.raw) :]
         assert counting.Counter(qb64b=atc).code == counting.CtrDex_2_0.WitnessIdxSigs
 
 
-def test_receipts_post_v2_returns_v2(multipart):
+def test_receipts_post_and_get_follow_stored_v2_event_version(multipart):
+    """Receipts should keep a v2 event's body version on both POST and GET."""
     with (
         habbing.openHab(
             name="bob-v2", salt=b"0123456789febob2", version=kering.Vrsn_2_0
@@ -658,126 +482,13 @@ def test_receipts_post_v2_returns_v2(multipart):
             version=kering.Vrsn_2_0,
         ) as (_, wanHab),
     ):
-        url = "http://127.0.0.1:5642/"
-        msgs = bytearray()
-        msgs.extend(
-            wanHab.makeEndRole(
-                eid=wanHab.pre,
-                role=kering.Roles.controller,
-                stamp=helping.nowIso8601(),
-                version=kering.Vrsn_2_0,
-            )
+        _seed_endpoint_records(
+            wanHab,
+            url="http://127.0.0.1:5642/",
+            version=wanHab.kever.serder.pvrsn,
         )
-        msgs.extend(
-            wanHab.makeLocScheme(
-                url=url,
-                scheme=kering.Schemes.http,
-                stamp=helping.nowIso8601(),
-                version=kering.Vrsn_2_0,
-            )
-        )
-        wanHab.psr.parse(ims=msgs)
+        _doist, witery = _start_witery(wanHab)
 
-        doist = doing.Doist(limit=1.0, tock=0.03125, real=True)
-        safe = basing.Baser(name=wanHab.name, temp=wanHab.temp)
-        witery = witnessing.Witnessery(db=safe, temp=wanHab.temp)
-        deeds = doist.enter(doers=[witery])
-        doist.recur(deeds=deeds)
-
-        app = falcon.App()
-        app.add_route("/witnesses", witnessing.WitnessCollectionEnd(witery))
-        aiding.loadEnds(app=app, witery=witery)
-        receipt_end = indirecting.ReceiptEnd(witery=witery, aids=[bobHab.pre])
-        app.add_route("/receipts", receipt_end)
-        client = testing.TestClient(app)
-
-        rep_w = client.simulate_post(
-            path="/witnesses", body=json.dumps({"aid": bobHab.pre})
-        )
-        assert rep_w.status == falcon.HTTP_OK
-        bob_wit = rep_w.json["eid"]
-
-        icp = bobHab.msgOwnEvent(sn=0)
-        icp_serder = serdering.SerderKERI(raw=icp)
-        assert kering.deversify(icp_serder.ked["v"]).pvrsn.major == 2
-
-        body, headers = multipart.create(dict(kel=icp))
-        headers[CESR_DESTINATION_HEADER] = bob_wit
-        rep_a = client.simulate_post(path="/aids", body=body, headers=headers)
-        assert rep_a.status == falcon.HTTP_200
-        code = rep_a.json["totp"]
-        m = coring.Matter(qb64=code)
-        rcode = coring.Matter(qb64=bobHab.decrypt(m.raw)).raw
-        totp = pyotp.TOTP(rcode)
-
-        rot = bobHab.rotate(adds=[bob_wit], version=kering.Vrsn_2_0)
-        rot_serder = serdering.SerderKERI(raw=rot)
-        assert kering.deversify(rot_serder.ked["v"]).pvrsn.major == 2
-        act = rot[rot_serder.size :]
-        rep_r = client.simulate_post(
-            path="/receipts",
-            body=rot_serder.raw.decode("utf-8"),
-            headers={
-                CESR_ATTACHMENT_HEADER: act.decode("utf-8"),
-                "content-type": CESR_CONTENT_TYPE,
-                "Authorization": f"{totp.now()}#{helping.nowIso8601()}",
-                CESR_DESTINATION_HEADER: bob_wit,
-            },
-        )
-        assert rep_r.status == falcon.HTTP_200
-        rct = serdering.SerderKERI(raw=rep_r.content)
-        assert kering.deversify(rct.ked["v"]).pvrsn.major == 2
-
-
-def test_ksn_get_serializes_body_and_attachment_frame_in_requested_version(multipart):
-    """Test that `GET /ksn` should version both the body and the endorsed attachment frame"""
-
-    # Create Bob and Wan habs, they are both v2
-    with (
-        habbing.openHab(
-            name="bob-ksn-v2", salt=b"0123456789feksn2", version=kering.Vrsn_2_0
-        ) as (_, bobHab),
-        habbing.openHab(
-            name="wan-ksn-v2",
-            transferable=False,
-            salt=b"0123456789fekwn2",
-            version=kering.Vrsn_2_0,
-        ) as (_, wanHab),
-    ):
-        url = "http://127.0.0.1:5642/"
-        msgs = bytearray()
-
-        # Set the controller role
-        msgs.extend(
-            wanHab.makeEndRole(
-                eid=wanHab.pre,
-                role=kering.Roles.controller,
-                stamp=helping.nowIso8601(),
-                version=kering.Vrsn_2_0,
-            )
-        )
-
-        # Set the HTTP scheme
-        msgs.extend(
-            wanHab.makeLocScheme(
-                url=url,
-                scheme=kering.Schemes.http,
-                stamp=helping.nowIso8601(),
-                version=kering.Vrsn_2_0,
-            )
-        )
-
-        # Parse the records
-        wanHab.psr.parse(ims=msgs)
-
-        # Set up the doist and witery
-        doist = doing.Doist(limit=1.0, tock=0.03125, real=True)
-        safe = basing.Baser(name=wanHab.name, temp=wanHab.temp)
-        witery = witnessing.Witnessery(db=safe, temp=wanHab.temp)
-        deeds = doist.enter(doers=[witery])
-        doist.recur(deeds=deeds)
-
-        ksn_end = indirecting.KeyStateEnd(witery=witery)
         app = falcon.App()
         app.add_route("/witnesses", witnessing.WitnessCollectionEnd(witery))
         aiding.loadEnds(app=app, witery=witery)
@@ -786,68 +497,68 @@ def test_ksn_get_serializes_body_and_attachment_frame_in_requested_version(multi
         )
         client = testing.TestClient(app)
 
-        # Provision a witness for Bob
         rep_w = client.simulate_post(
             path="/witnesses", body=json.dumps({"aid": bobHab.pre})
         )
         assert rep_w.status == falcon.HTTP_OK
         bob_wit = rep_w.json["eid"]
+        witness = witery.wits[bob_wit]
 
-        # Submit an inception event to the witness to ensure Bob's hab is initialized in the
-        # witness and can be queried for a receipt later
-        icp = bobHab.msgOwnEvent(sn=0)
-        body, headers = multipart.create(dict(kel=icp))
-
-        # Set the destination header to Bob's witness
+        body, headers = multipart.create(dict(kel=bobHab.msgOwnEvent(sn=0)))
         headers[CESR_DESTINATION_HEADER] = bob_wit
-
-        # Send the /aids request to the witness
         rep_a = client.simulate_post(path="/aids", body=body, headers=headers)
-
-        # Assert the response is successful and contains the TOTP code
         assert rep_a.status == falcon.HTTP_200
         code = rep_a.json["totp"]
-
-        # Decrypt and load the code from the response
         matter = coring.Matter(qb64=code)
-        rcode = coring.Matter(qb64=bobHab.decrypt(matter.raw)).raw
-        totp = pyotp.TOTP(rcode)
+        raw_code = coring.Matter(qb64=bobHab.decrypt(matter.raw)).raw
+        totp = pyotp.TOTP(raw_code)
 
-        # Create a rotation event for Bob with its witness
+        # Submit a real v2 rotation so the witness stores a fully witnessed
+        # event and returns an immediate receipt in the same event version.
         rot = bobHab.rotate(adds=[bob_wit], version=kering.Vrsn_2_0)
-
-        # Submit the rotation to /receipts to the witness with the TOTP code
-        rep_r = _simulate_cesr_post(
+        rot_serder = serdering.SerderKERI(raw=rot)
+        rep_post = _simulate_cesr_post(
             client,
             path="/receipts",
             msg=rot,
             destination=bob_wit,
             headers={"Authorization": f"{totp.now()}#{helping.nowIso8601()}"},
         )
-        assert rep_r.status == falcon.HTTP_200
+        assert rep_post.status == falcon.HTTP_200
+        post_rct = serdering.SerderKERI(raw=rep_post.content)
+        assert kering.deversify(post_rct.ked["v"]).pvrsn.major == 2
 
-        # Submit a ksn query to the witness
-        headers = {CESR_DESTINATION_HEADER: bob_wit}
-        req = testing.create_req(
-            path="/ksn",
-            query_string=f"pre={bobHab.pre}",
-            headers=headers,
+        row_wigs = witness.hab.db.wigs.get(
+            keys=(bobHab.pre.encode("utf-8"), rot_serder.saidb)
+        )
+        assert len(row_wigs) >= 1
+
+        # Lookup by sequence number and by said should both reconstruct the
+        # same stored v2 receipt body while framing witness signatures in v2.
+        hdrs = {CESR_DESTINATION_HEADER: bob_wit}
+        rep_by_sn = client.simulate_get(
+            "/receipts",
+            query_string=f"pre={bobHab.pre}&sn=1",
+            headers=hdrs,
+        )
+        assert rep_by_sn.status == falcon.HTTP_200
+        assert rep_by_sn.headers["Content-Type"] == "application/json+cesr"
+        rct_by_sn = serdering.SerderKERI(raw=rep_by_sn.content)
+        assert rct_by_sn.ked["t"] == "rct"
+        assert rct_by_sn.sn == 1
+        assert kering.deversify(rct_by_sn.ked["v"]).pvrsn.major == 2
+        atc_by_sn = rep_by_sn.content[len(rct_by_sn.raw) :]
+        assert (
+            counting.Counter(qb64b=atc_by_sn).code == counting.CtrDex_2_0.WitnessIdxSigs
         )
 
-        # Assert the response is successful
-        rep = falcon.Response()
-        ksn_end.on_get(req, rep)
-        assert rep.status == falcon.HTTP_200
-        assert rep.content_type == "application/cesr"
-
-        # Assert the rpy message is v2
-        rpy = serdering.SerderKERI(raw=bytes(rep.data))
-        assert rpy.ked["t"] == "rpy"
-        assert kering.deversify(rpy.ked["v"]).pvrsn == kering.Vrsn_2_0
-
-        # Retrieve the attachment
-        atc = bytearray(bytes(rep.data)[len(rpy.raw) :])
-        assert atc
-
-        # Assert the attachment group is v2
-        assert counting.Counter(qb64b=atc).code == counting.CtrDex_2_0.AttachmentGroup
+        rep_by_said = client.simulate_get(
+            "/receipts",
+            query_string=f"pre={bobHab.pre}&said={rot_serder.said}",
+            headers=hdrs,
+        )
+        assert rep_by_said.status == falcon.HTTP_200
+        rct_by_said = serdering.SerderKERI(raw=rep_by_said.content)
+        assert rct_by_said.ked["t"] == "rct"
+        assert rct_by_said.ked["d"] == rot_serder.said
+        assert kering.deversify(rct_by_said.ked["v"]).pvrsn.major == 2

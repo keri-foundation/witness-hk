@@ -24,11 +24,6 @@ from keri.help import helping
 logger = help.ogler.getLogger()
 
 
-def _messageVersion(serder):
-    """Return the protocol version declared by a KERI message."""
-    return kering.deversify(serder.ked["v"]).pvrsn
-
-
 class WitnessStart(doing.DoDoer):
     """Doer to print witness prefix after initialization"""
 
@@ -241,19 +236,19 @@ class HttpEnd:
 
         cr = httping.parseCesrHttpRequest(req=req)
 
-        # Use Serder so the message keeps its own version instead of falling back to keripy default version
         serder = serdering.SerderKERI(sad=cr.payload, kind=eventing.Kinds.json)
         msg = bytearray(serder.raw)
         msg.extend(cr.attachments.encode("utf-8"))
 
         # Use the message version
-        pvrsn = _messageVersion(serder)
+        pvrsn = kering.deversify(serder.ked["v"]).pvrsn
 
         if (cipher := witness.getCode()) is not None:
 
             plain = witness.hab.decrypt(ser=cipher.raw)
             scode = coring.Matter(qb64b=plain).raw
-            # Check for a one-time-password in the Authroizaiton header.  If it works, parse this as "local"
+            # Check for a one-time-password in the Authorization header. If it
+            # succeeds, parse this event as locally authenticated.
             if (auth := req.get_header("Authorization")) is not None and validCode(
                 scode, auth
             ):
@@ -267,35 +262,31 @@ class HttpEnd:
                 ims=msg, local=False, version=pvrsn
             )  # This will likely go to the misfit escrow
 
-        if serder.proto in ("ACDC",):
+        ilk = serder.ked["t"]
+        if ilk in (
+            Ilks.icp,
+            Ilks.rot,
+            Ilks.ixn,
+            Ilks.dip,
+            Ilks.drt,
+            Ilks.exn,
+            Ilks.rpy,
+        ):
             rep.set_header("Content-Type", "application/json")
             rep.status = falcon.HTTP_204
-        else:
-            ilk = serder.ked["t"]
-            if ilk in (
-                Ilks.icp,
-                Ilks.rot,
-                Ilks.ixn,
-                Ilks.dip,
-                Ilks.drt,
-                Ilks.exn,
-                Ilks.rpy,
-            ):
+        elif ilk in (Ilks.vcp, Ilks.vrt, Ilks.iss, Ilks.rev, Ilks.bis, Ilks.brv):
+            rep.set_header("Content-Type", "application/json")
+            rep.status = falcon.HTTP_204
+        elif ilk in (Ilks.qry,):
+            if serder.ked["r"] in ("mbx",):
+                rep.set_header("Content-Type", "text/event-stream")
+                rep.status = falcon.HTTP_200
+                rep.stream = QryRpyMailboxIterable(
+                    mbx=witness.mbx, cues=self.qrycues, said=serder.said
+                )
+            else:
                 rep.set_header("Content-Type", "application/json")
                 rep.status = falcon.HTTP_204
-            elif ilk in (Ilks.vcp, Ilks.vrt, Ilks.iss, Ilks.rev, Ilks.bis, Ilks.brv):
-                rep.set_header("Content-Type", "application/json")
-                rep.status = falcon.HTTP_204
-            elif ilk in (Ilks.qry,):
-                if serder.ked["r"] in ("mbx",):
-                    rep.set_header("Content-Type", "text/event-stream")
-                    rep.status = falcon.HTTP_200
-                    rep.stream = QryRpyMailboxIterable(
-                        mbx=witness.mbx, cues=self.qrycues, said=serder.said
-                    )
-                else:
-                    rep.set_header("Content-Type", "application/json")
-                    rep.status = falcon.HTTP_204
 
     def on_put(self, req, rep):
         """
@@ -535,7 +526,7 @@ class ReceiptEnd:
         # Mirror the receipted event's protocol version for the receipt body,
         # but keep newly generated attachment framing on the modern CESR v2
         # genus so clients do not need legacy attachment support
-        pvrsn = _messageVersion(serder)
+        pvrsn = kering.deversify(serder.ked["v"]).pvrsn
         gvrsn = kering.Vrsn_2_0
 
         # Check for a one-time-password in the Authroizaiton header.  If it works, parse this as "local"
@@ -725,7 +716,7 @@ class KeyStateEnd:
             data=kever.state()._asdict(),
             version=pvrsn,
             pvrsn=pvrsn,
-            kind=eventing.Kinds.json,
+            kind=eventing.Kinds.cesr,
         )
 
         atc = witness.hab.endorse(rserder)

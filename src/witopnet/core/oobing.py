@@ -13,21 +13,6 @@ from ordered_set import OrderedSet as oset
 from keri import kering
 
 
-def _oobiReplying():
-    """Return the fixed legacy reply settings used for OOBI discovery records.
-
-    OOBI replies are discovery/bootstrap metadata, not permanent KEL history.
-    When keripy needs to freshly generate discovery records, prefer the stable
-    legacy v1 JSON format. Stored reply records, however, are replayed by
-    ``replyToOobi()`` in whatever format they were originally stored
-    """
-    return dict(
-        version=kering.Vrsn_1_0,
-        pvrsn=kering.Vrsn_1_0,
-        kind=eventing.Kinds.json,
-    )
-
-
 class OOBIEnd:
     """REST API for OOBI endpoints
 
@@ -86,7 +71,11 @@ class OOBIEnd:
         if not db.fullyWitnessed(kever.serder):
             raise falcon.HTTPNotFound(description=f"aid {aid} not found")
 
-        replying = _oobiReplying()
+        replying = dict(
+            version=kering.Vrsn_1_0,
+            pvrsn=kering.Vrsn_1_0,
+            kind=eventing.Kinds.json,
+        )
 
         owits = oset(kever.wits)
         if kever.prefixer.qb64 in witness.hby.prefixes:  # One of our identifiers

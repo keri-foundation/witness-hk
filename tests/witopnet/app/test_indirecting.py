@@ -7,7 +7,7 @@ Unit tests for KeyStateEnd and KeyLogEnd endpoint classes
 
 import falcon
 from falcon import testing
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 from keri import kering
 from keri.app.httping import CESR_DESTINATION_HEADER
 
@@ -86,7 +86,7 @@ class TestKeyStateEnd:
         self.client = testing.TestClient(self.app)
 
     def test_on_get_success(self):
-        """Test successful key state query"""
+        """Test successful key state query and emitted reply shape."""
         headers = {CESR_DESTINATION_HEADER: self.witness_aid}
 
         response = self.client.simulate_get(
@@ -103,22 +103,12 @@ class TestKeyStateEnd:
         # Verify kever.state was called
         self.kever.state.assert_called_once()
 
-        # Verify endorse was called
+        # Verify endorse was called with a fixed v2 CESR reply serder.
         self.witness.hab.endorse.assert_called_once()
-
-    @patch("witopnet.app.indirecting.reply")
-    def test_on_get_always_generates_v2_reply(self, mock_reply):
-        mock_reply.return_value = MagicMock()
-        headers = {CESR_DESTINATION_HEADER: self.witness_aid}
-
-        response = self.client.simulate_get(
-            "/ksn", query_string=f"pre={self.test_pre}", headers=headers
-        )
-
-        assert response.status == falcon.HTTP_200
-        _, kwargs = mock_reply.call_args
-        assert kwargs["version"] == kering.Vrsn_2_0
-        assert kwargs["pvrsn"] == kering.Vrsn_2_0
+        reply_serder = self.witness.hab.endorse.call_args.args[0]
+        assert reply_serder.ked["t"] == "rpy"
+        assert kering.deversify(reply_serder.ked["v"]).pvrsn == kering.Vrsn_2_0
+        assert reply_serder.kind == kering.Kinds.cesr
 
     def test_on_get_missing_destination_header(self):
         """Test request without CESR destination header"""

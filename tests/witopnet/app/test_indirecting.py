@@ -120,7 +120,6 @@ class TestKeyStateEnd:
         assert kwargs["version"] == kering.Vrsn_2_0
         assert kwargs["pvrsn"] == kering.Vrsn_2_0
 
-
     def test_on_get_missing_destination_header(self):
         """Test request without CESR destination header"""
         response = self.client.simulate_get("/ksn", query_string=f"pre={self.test_pre}")

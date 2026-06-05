@@ -141,7 +141,10 @@ def test_http_post_uses_inbound_version_across_event_types():
 
     for bob_name, bob_salt, version in cases:
         with (
-            habbing.openHab(name=bob_name, salt=bob_salt, version=version) as (_, bobHab),
+            habbing.openHab(name=bob_name, salt=bob_salt, version=version) as (
+                _,
+                bobHab,
+            ),
             habbing.openHab(
                 name=f"wan-{bob_name}",
                 transferable=False,
@@ -181,7 +184,7 @@ def test_http_post_uses_inbound_version_across_event_types():
             witery = witnessing.Witnessery(db=safe, temp=wanHab.temp)
             deeds = doist.enter(doers=[witery])
             doist.recur(deeds=deeds)
-            
+
             http_end = indirecting.HttpEnd(witery=witery)
             app = falcon.App()
             app.add_route("/witnesses", witnessing.WitnessCollectionEnd(witery))
@@ -235,7 +238,7 @@ def test_http_post_uses_inbound_version_across_event_types():
             http_end.on_post(req, rep)
             assert rep.status == falcon.HTTP_204
 
-            # Submit a rpy message 
+            # Submit a rpy message
             rpy = bobHab.makeEndRole(
                 eid=bobHab.pre,
                 role=kering.Roles.controller,
@@ -555,11 +558,14 @@ def test_receipts_integration(multipart):
         assert kering.deversify(rct_said.ked["v"]).pvrsn.major == 2
         assert len(rep_g2.content) > len(rct_said.raw)
 
+
 def test_receipts_get_uses_stored_v1_event_version(multipart):
     """Receipt lookup should keep a v1 body while using modern v2 attachments."""
     with (
         habbing.openHab(name="bob-v1", salt=b"0123456789febov1") as (_, bobHab),
-        habbing.openHab(name="wan-v1", transferable=False, salt=b"0123456789fecbv1") as (
+        habbing.openHab(
+            name="wan-v1", transferable=False, salt=b"0123456789fecbv1"
+        ) as (
             _,
             wanHab,
         ),
@@ -621,7 +627,9 @@ def test_receipts_get_uses_stored_v1_event_version(multipart):
         )
         assert rep_p.status == falcon.HTTP_200
 
-        row_wigs = witness.hab.db.wigs.get(keys=(bobHab.pre.encode("utf-8"), rot_serder.saidb))
+        row_wigs = witness.hab.db.wigs.get(
+            keys=(bobHab.pre.encode("utf-8"), rot_serder.saidb)
+        )
         assert len(row_wigs) >= 1
 
         rep_g = client.simulate_get(
@@ -723,13 +731,12 @@ def test_receipts_post_v2_returns_v2(multipart):
 
 def test_ksn_get_serializes_body_and_attachment_frame_in_requested_version(multipart):
     """Test that `GET /ksn` should version both the body and the endorsed attachment frame"""
-    
+
     # Create Bob and Wan habs, they are both v2
     with (
         habbing.openHab(
             name="bob-ksn-v2", salt=b"0123456789feksn2", version=kering.Vrsn_2_0
         ) as (_, bobHab),
-        
         habbing.openHab(
             name="wan-ksn-v2",
             transferable=False,
@@ -739,7 +746,7 @@ def test_ksn_get_serializes_body_and_attachment_frame_in_requested_version(multi
     ):
         url = "http://127.0.0.1:5642/"
         msgs = bytearray()
-        
+
         # Set the controller role
         msgs.extend(
             wanHab.makeEndRole(
@@ -774,7 +781,9 @@ def test_ksn_get_serializes_body_and_attachment_frame_in_requested_version(multi
         app = falcon.App()
         app.add_route("/witnesses", witnessing.WitnessCollectionEnd(witery))
         aiding.loadEnds(app=app, witery=witery)
-        app.add_route("/receipts", indirecting.ReceiptEnd(witery=witery, aids=[bobHab.pre]))
+        app.add_route(
+            "/receipts", indirecting.ReceiptEnd(witery=witery, aids=[bobHab.pre])
+        )
         client = testing.TestClient(app)
 
         # Provision a witness for Bob
@@ -784,7 +793,7 @@ def test_ksn_get_serializes_body_and_attachment_frame_in_requested_version(multi
         assert rep_w.status == falcon.HTTP_OK
         bob_wit = rep_w.json["eid"]
 
-        # Submit an inception event to the witness to ensure Bob's hab is initialized in the 
+        # Submit an inception event to the witness to ensure Bob's hab is initialized in the
         # witness and can be queried for a receipt later
         icp = bobHab.msgOwnEvent(sn=0)
         body, headers = multipart.create(dict(kel=icp))
@@ -798,8 +807,8 @@ def test_ksn_get_serializes_body_and_attachment_frame_in_requested_version(multi
         # Assert the response is successful and contains the TOTP code
         assert rep_a.status == falcon.HTTP_200
         code = rep_a.json["totp"]
-        
-        # Decrypt and load the code from the response 
+
+        # Decrypt and load the code from the response
         matter = coring.Matter(qb64=code)
         rcode = coring.Matter(qb64=bobHab.decrypt(matter.raw)).raw
         totp = pyotp.TOTP(rcode)
@@ -839,6 +848,6 @@ def test_ksn_get_serializes_body_and_attachment_frame_in_requested_version(multi
         # Retrieve the attachment
         atc = bytearray(bytes(rep.data)[len(rpy.raw) :])
         assert atc
-        
+
         # Assert the attachment group is v2
         assert counting.Counter(qb64b=atc).code == counting.CtrDex_2_0.AttachmentGroup

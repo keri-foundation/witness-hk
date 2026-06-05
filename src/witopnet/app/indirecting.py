@@ -559,7 +559,7 @@ class ReceiptEnd:
                 )
 
             # Generate a receipt whose body follows the receipted event, while
-            # its attachment framing uses the v2 CESR genus 
+            # its attachment framing uses the v2 CESR genus
             rct = witness.hab.receipt(
                 serder,
                 kind=serder.kind,
@@ -637,7 +637,7 @@ class ReceiptEnd:
             )
         # Receipt lookup reconstructs the receipt from the stored event's
         # protocol and serialization metadata so the proof matches the event it
-        # is about. We still frame any generated attachments with CESR v2 
+        # is about. We still frame any generated attachments with CESR v2
         receipting = dict(pvrsn=serder.pvrsn, kind=serder.kind)
         if serder.gvrsn is not None:
             receipting["gvrsn"] = serder.gvrsn

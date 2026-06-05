@@ -32,7 +32,9 @@ def _stream_messages(stream):
     """
     messages = []
     for version, ilk in STREAM_MESSAGE_PATTERN.findall(stream):
-        messages.append((kering.deversify(version.decode("utf-8")).pvrsn, ilk.decode("utf-8")))
+        messages.append(
+            (kering.deversify(version.decode("utf-8")).pvrsn, ilk.decode("utf-8"))
+        )
 
     return messages
 
@@ -130,7 +132,7 @@ def test_self_owned_oobi_replays_v2_kel_and_reuses_stored_reply_records():
                 version=kering.Vrsn_2_0,
             )
         )
-        
+
         # Parse the records
         wanHab.psr.parse(ims=msgs)
 

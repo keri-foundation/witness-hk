@@ -101,8 +101,8 @@ def test_oobi_closed_witness_db_returns_not_found():
     assert response.status == falcon.HTTP_404
 
 
-def test_self_owned_oobi_replays_v2_kel_and_keeps_generated_replies_on_legacy_v1():
-    """Self-owned OOBIs should replay stored KEL history but keep discovery replies on v1."""
+def test_self_owned_oobi_replays_v2_kel_and_reuses_stored_reply_records():
+    """Self-owned OOBIs should replay KEL history and reuse stored reply versions."""
 
     with habbing.openHab(
         name="wan-oobi",
@@ -164,27 +164,28 @@ def test_self_owned_oobi_replays_v2_kel_and_keeps_generated_replies_on_legacy_v1
         assert messages[0][1] == "icp"
         assert messages[0][0] == kering.Vrsn_2_0
 
-        # OOBI is just discovery material, so even though the witness's own KEL
-        # is v2, the generated discovery reply records stay on the stable
-        # legacy v1 JSON format.
+        # With the simpler `replyToOobi()` path, stored reply records come back
+        # in whatever version they were originally authored. This witness's
+        # endpoint metadata was created as v2, so the discovery replies remain
+        # v2 alongside the replayed v2 KEL history.
         default_reply_versions = [version for version, ilk in messages if ilk == "rpy"]
         assert default_reply_versions
-        assert all(version == kering.Vrsn_1_0 for version in default_reply_versions)
+        assert all(version == kering.Vrsn_2_0 for version in default_reply_versions)
 
-        # Fetch the OOBI again and confirm the discovery replies stay stable on
-        # legacy v1 across repeated requests.
+        # Fetch the OOBI again and confirm the stored reply versions remain
+        # stable across repeated requests.
         response = client.simulate_get(f"/oobi/{witness_aid}")
         assert response.status_code == 200
         messages = _stream_messages(response.content)
 
-        # The replayed KEL stays untouched, and the generated discovery replies
-        # remain legacy v1 regardless of the target identifier's newer KEL.
+        # The replayed KEL stays untouched, and the stored reply records keep
+        # their original authored v2 format.
         assert messages[0][1] == "icp"
         assert messages[0][0] == kering.Vrsn_2_0
 
-        v1_reply_versions = [version for version, ilk in messages if ilk == "rpy"]
-        assert v1_reply_versions
-        assert all(version == kering.Vrsn_1_0 for version in v1_reply_versions)
+        v2_reply_versions = [version for version, ilk in messages if ilk == "rpy"]
+        assert v2_reply_versions
+        assert all(version == kering.Vrsn_2_0 for version in v2_reply_versions)
 
 
 def test_delete_missing_witness_returns_not_found():

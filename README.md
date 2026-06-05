@@ -141,7 +141,7 @@ witopnet marshal submit \
 | `GET` | `/oobi/{aid}/{role}` | OOBI with role. |
 | `GET` | `/oobi/{aid}/{role}/{eid}` | OOBI with role and participant EID. |
 
-Key-event ingress continues to honor the version declared by the incoming KERI message. `GET /receipts` reconstructs receipts from the stored event it proves, `GET /oobi/...` keeps freshly generated discovery reply records on legacy v1 JSON while replaying historical KEL events exactly as stored, and `GET /ksn` emits a fixed v2 current-state reply.
+Key-event ingress continues to honor the version declared by the incoming KERI message. `GET /receipts` reconstructs receipts from the stored event it proves, `GET /oobi/...` replays KEL history and stored reply records as already authored by keripy's `replyToOobi()` flow, and `GET /ksn` emits a fixed v2 current-state reply.
 
 ## Scripts
 

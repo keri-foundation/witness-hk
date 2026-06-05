@@ -17,65 +17,15 @@ def _oobiReplying():
     """Return the fixed legacy reply settings used for OOBI discovery records.
 
     OOBI replies are discovery/bootstrap metadata, not permanent KEL history.
-    We therefore keep fresh OOBI reply records on the stable legacy v1 JSON
-    format even when the identifier's current key events are v2
+    When keripy needs to freshly generate discovery records, prefer the stable
+    legacy v1 JSON format. Stored reply records, however, are replayed by
+    ``replyToOobi()`` in whatever format they were originally stored
     """
     return dict(
         version=kering.Vrsn_1_0,
         pvrsn=kering.Vrsn_1_0,
         kind=eventing.Kinds.json,
     )
-
-
-def _legacySelfOobi(hab, role, eids):
-    """Build an OOBI stream for a witness-owned identifier with legacy replies.
-
-    The controller's replayed KEL is returned as-is so stored events keep
-    their original wire version. The self-authored endpoint replies are rebuilt
-    on demand as legacy v1 JSON discovery records because OOBI is a bootstrap
-    surface, not a permanent protocol-history artifact.
-
-    Parameters:
-        hab (Hab): Local habitat that owns the identifier being served.
-        role (str | None): Optional OOBI role filter from the request path.
-        eids (list[str]): Optional endpoint identifier filter from the request path.
-
-    Returns:
-        bytearray: Replay plus freshly generated self-authored OOBI replies.
-    """
-    replying = _oobiReplying()
-    msgs = bytearray(hab.replay(hab.pre))
-
-    for (_, erole, eid), end in hab.db.ends.getTopItemIter(keys=(hab.pre,)):
-        if not (end.enabled or end.allowed):
-            continue
-        if role is not None and role != erole:
-            continue
-        if eids and eid not in eids:
-            continue
-
-        # Only regenerate location replies we are authoritative for; foreign
-        # endpoint locations must keep their originally authored bytes.
-        if eid == hab.pre:
-            msgs.extend(
-                hab.replyLocScheme(
-                    eid=eid,
-                    **replying,
-                )
-            )
-        else:
-            msgs.extend(hab.loadLocScheme(eid=eid))
-
-        msgs.extend(
-            hab.makeEndRole(
-                eid=eid,
-                role=erole,
-                allow=end.allowed,
-                **replying,
-            )
-        )
-
-    return msgs
 
 
 class OOBIEnd:
@@ -136,20 +86,16 @@ class OOBIEnd:
         if not db.fullyWitnessed(kever.serder):
             raise falcon.HTTPNotFound(description=f"aid {aid} not found")
 
-        # Replayed KEL events remain exactly as stored. Fresh discovery reply
-        # records, stay on the simpler legacy v1 JSON format
         replying = _oobiReplying()
 
         owits = oset(kever.wits)
         if kever.prefixer.qb64 in witness.hby.prefixes:  # One of our identifiers
             hab = witness.hby.habs[kever.prefixer.qb64]
-            own = True
         elif match := owits.intersection(
             witness.hby.prefixes
         ):  # We are a witness for identifier
             pre = match.pop()
             hab = witness.hby.habs[pre]
-            own = False
         else:  # Not allowed to respond
             raise falcon.HTTPNotAcceptable(description="invalid OOBI request")
 
@@ -157,25 +103,20 @@ class OOBIEnd:
         if eid:
             eids.append(eid)
 
-        if own and aid == hab.pre and role in (None, kering.Roles.controller):
-            # Rebuild self-authored controller metadata in the fixed legacy
-            # OOBI format; the replayed KEL remains in its stored version.
-            msgs = _legacySelfOobi(hab=hab, role=role, eids=eids)
-        else:
+        msgs = hab.replyToOobi(
+            aid=aid,
+            role=role,
+            eids=eids,
+            **replying,
+        )
+        if not msgs and role is None:
             msgs = hab.replyToOobi(
                 aid=aid,
-                role=role,
+                role=kering.Roles.witness,
                 eids=eids,
                 **replying,
             )
-            if not msgs and role is None:
-                msgs = hab.replyToOobi(
-                    aid=aid,
-                    role=kering.Roles.witness,
-                    eids=eids,
-                    **replying,
-                )
-                msgs.extend(hab.replay(aid))
+            msgs.extend(hab.replay(aid))
 
         if msgs:
             rep.status = falcon.HTTP_200  # This is the default status

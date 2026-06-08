@@ -111,7 +111,6 @@ def setup(
         name="witopnet",
         base=base,
         temp=temp,
-        headDirPath=headDirPath,
     )
     dbDoer = BaserDoer(db)
     cf = configing.Configer(name=db.name, headDirPath=headDirPath, temp=temp)
@@ -390,8 +389,6 @@ class Witnessery(doing.DoDoer):
             version=kering.Vrsn_2_0,
             bran=None,
         )
-        # Pass both version and kind so the witness inception event is emitted
-        # as v2 CESR instead of inheriting Hab's older v1 JSON default.
         hab = hby.makeHab(
             name=name,
             transferable=False,

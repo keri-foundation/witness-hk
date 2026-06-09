@@ -81,27 +81,28 @@ def test_create_witness_fd_exhaustion_returns_service_unavailable():
 
 
 def test_setup_keeps_config_dir_out_of_witopnet_db_path():
-    with patch.object(witnessing.basing, "Baser") as mock_baser, patch.object(
-        witnessing.configing, "Configer"
-    ) as mock_configer, patch.object(
-        witnessing, "BaserDoer", return_value=MagicMock(name="db-doer")
-    ), patch.object(
-        witnessing, "Witnessery", return_value=MagicMock(name="witery")
-    ), patch.object(
-        witnessing, "createHttpServer", return_value=MagicMock(name="server")
-    ), patch.object(
-        witnessing.http, "ServerDoer", return_value=MagicMock(name="server-doer")
-    ), patch.object(
-        witnessing.oobing, "OOBIEnd", return_value=MagicMock(name="oobi-end")
-    ), patch.object(
-        witnessing, "HttpEnd", return_value=MagicMock(name="http-end")
-    ), patch.object(
-        witnessing, "ReceiptEnd", return_value=MagicMock(name="receipt-end")
-    ), patch.object(
-        witnessing, "KeyStateEnd", return_value=MagicMock(name="ksn-end")
-    ), patch.object(
-        witnessing, "KeyLogEnd", return_value=MagicMock(name="klog-end")
-    ), patch.object(witnessing.aiding, "loadEnds"):
+    with (
+        patch.object(witnessing.basing, "Baser") as mock_baser,
+        patch.object(witnessing.configing, "Configer") as mock_configer,
+        patch.object(witnessing, "BaserDoer", return_value=MagicMock(name="db-doer")),
+        patch.object(witnessing, "Witnessery", return_value=MagicMock(name="witery")),
+        patch.object(
+            witnessing, "createHttpServer", return_value=MagicMock(name="server")
+        ),
+        patch.object(
+            witnessing.http, "ServerDoer", return_value=MagicMock(name="server-doer")
+        ),
+        patch.object(
+            witnessing.oobing, "OOBIEnd", return_value=MagicMock(name="oobi-end")
+        ),
+        patch.object(witnessing, "HttpEnd", return_value=MagicMock(name="http-end")),
+        patch.object(
+            witnessing, "ReceiptEnd", return_value=MagicMock(name="receipt-end")
+        ),
+        patch.object(witnessing, "KeyStateEnd", return_value=MagicMock(name="ksn-end")),
+        patch.object(witnessing, "KeyLogEnd", return_value=MagicMock(name="klog-end")),
+        patch.object(witnessing.aiding, "loadEnds"),
+    ):
         mock_baser.return_value = SimpleNamespace(name="witopnet")
 
         witnessing.setup(base="witopnet", temp=False, headDirPath="/tmp/config-root")

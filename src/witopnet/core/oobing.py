@@ -7,9 +7,10 @@ witopnet.core.oobing package
 """
 
 import falcon
-from keri import kering
+from keri.core import eventing
 from keri.end import ending
 from ordered_set import OrderedSet as oset
+from keri import kering
 
 
 class OOBIEnd:
@@ -70,6 +71,12 @@ class OOBIEnd:
         if not db.fullyWitnessed(kever.serder):
             raise falcon.HTTPNotFound(description=f"aid {aid} not found")
 
+        replying = dict(
+            version=kering.Vrsn_1_0,
+            pvrsn=kering.Vrsn_1_0,
+            kind=eventing.Kinds.json,
+        )
+
         owits = oset(kever.wits)
         if kever.prefixer.qb64 in witness.hby.prefixes:  # One of our identifiers
             hab = witness.hby.habs[kever.prefixer.qb64]
@@ -85,9 +92,19 @@ class OOBIEnd:
         if eid:
             eids.append(eid)
 
-        msgs = hab.replyToOobi(aid=aid, role=role, eids=eids)
+        msgs = hab.replyToOobi(
+            aid=aid,
+            role=role,
+            eids=eids,
+            **replying,
+        )
         if not msgs and role is None:
-            msgs = hab.replyToOobi(aid=aid, role=kering.Roles.witness, eids=eids)
+            msgs = hab.replyToOobi(
+                aid=aid,
+                role=kering.Roles.witness,
+                eids=eids,
+                **replying,
+            )
             msgs.extend(hab.replay(aid))
 
         if msgs:

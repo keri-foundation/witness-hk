@@ -5,15 +5,38 @@ tests.app.test_witnessing module
 """
 
 import errno
+import json
+import re
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import falcon
 from falcon import testing
+from hio.base import doing
+from keri import kering
+from keri.app import habbing
+from keri.help import helping
 
-from witopnet.core import oobing, witnessing
+from witopnet.core import basing, oobing, witnessing
 
 CONTROLLER_AID = "ENsqL5zLYNbZf0kcOlx-ioqNWlatD9rKZZM4hbEI7nza"
+STREAM_MESSAGE_PATTERN = re.compile(rb'\{"v":"([^"]+)","t":"([^"]+)"')
+
+
+def _stream_messages(stream):
+    """Return `(version, ilk)` pairs for each JSON KERI message in a CESR stream.
+
+    OOBI responses concatenate JSON KERI bodies with CESR attachments, so this
+    helper inspects each serialized body directly instead of assuming the first
+    message tells the whole versioning story for the stream.
+    """
+    messages = []
+    for version, ilk in STREAM_MESSAGE_PATTERN.findall(stream):
+        messages.append(
+            (kering.deversify(version.decode("utf-8")).pvrsn, ilk.decode("utf-8"))
+        )
+
+    return messages
 
 
 def test_delete_witness_removes_registry_before_closing():
@@ -57,6 +80,39 @@ def test_create_witness_fd_exhaustion_returns_service_unavailable():
     witery._logFdExhaustion.assert_called_once_with(CONTROLLER_AID)
 
 
+def test_setup_keeps_config_dir_out_of_witopnet_db_path():
+    with (
+        patch.object(witnessing.basing, "Baser") as mock_baser,
+        patch.object(witnessing.configing, "Configer") as mock_configer,
+        patch.object(witnessing, "BaserDoer", return_value=MagicMock(name="db-doer")),
+        patch.object(witnessing, "Witnessery", return_value=MagicMock(name="witery")),
+        patch.object(
+            witnessing, "createHttpServer", return_value=MagicMock(name="server")
+        ),
+        patch.object(
+            witnessing.http, "ServerDoer", return_value=MagicMock(name="server-doer")
+        ),
+        patch.object(
+            witnessing.oobing, "OOBIEnd", return_value=MagicMock(name="oobi-end")
+        ),
+        patch.object(witnessing, "HttpEnd", return_value=MagicMock(name="http-end")),
+        patch.object(
+            witnessing, "ReceiptEnd", return_value=MagicMock(name="receipt-end")
+        ),
+        patch.object(witnessing, "KeyStateEnd", return_value=MagicMock(name="ksn-end")),
+        patch.object(witnessing, "KeyLogEnd", return_value=MagicMock(name="klog-end")),
+        patch.object(witnessing.aiding, "loadEnds"),
+    ):
+        mock_baser.return_value = SimpleNamespace(name="witopnet")
+
+        witnessing.setup(base="witopnet", temp=False, headDirPath="/tmp/config-root")
+
+    mock_baser.assert_called_once_with(name="witopnet", base="witopnet", temp=False)
+    mock_configer.assert_called_once_with(
+        name="witopnet", headDirPath="/tmp/config-root", temp=False
+    )
+
+
 def test_oobi_closed_witness_db_returns_not_found():
     aid = "EAID123"
     witness = SimpleNamespace(
@@ -78,6 +134,86 @@ def test_oobi_closed_witness_db_returns_not_found():
     response = client.simulate_get(f"/oobi/{aid}/controller")
 
     assert response.status == falcon.HTTP_404
+
+
+def test_self_owned_oobi_reuses_stored_reply_record_versions():
+    """Self-owned OOBIs should keep the authored version of stored reply records."""
+
+    with habbing.openHab(
+        name="wan-oobi",
+        transferable=False,
+        salt=b"0123456789fedoob",
+        version=kering.Vrsn_2_0,
+    ) as (_, wanHab):
+        url = "http://127.0.0.1:5642/"
+        msgs = bytearray()
+
+        # Set up the witness and its OOBI endpoint
+        msgs.extend(
+            wanHab.makeEndRole(
+                eid=wanHab.pre,
+                role=kering.Roles.controller,
+                stamp=helping.nowIso8601(),
+                version=kering.Vrsn_2_0,
+            )
+        )
+        msgs.extend(
+            wanHab.makeLocScheme(
+                url=url,
+                scheme=kering.Schemes.http,
+                stamp=helping.nowIso8601(),
+                version=kering.Vrsn_2_0,
+            )
+        )
+
+        # Parse the records
+        wanHab.psr.parse(ims=msgs)
+
+        # Set up the doist and witery
+        doist = doing.Doist(limit=1.0, tock=0.03125, real=True)
+        safe = basing.Baser(name=wanHab.name, temp=wanHab.temp)
+        witery = witnessing.Witnessery(db=safe, temp=wanHab.temp)
+        deeds = doist.enter(doers=[witery])
+        doist.recur(deeds=deeds)
+
+        endpoint = oobing.OOBIEnd(witery=witery)
+        app = falcon.App()
+        app.add_route("/witnesses", witnessing.WitnessCollectionEnd(witery))
+        app.add_route("/oobi/{aid}", endpoint)
+        app.add_route("/oobi/{aid}/{role}", endpoint)
+        client = testing.TestClient(app)
+
+        # Provision a witness identifier for wanHab
+        rep_w = client.simulate_post(
+            path="/witnesses", body=json.dumps({"aid": wanHab.pre})
+        )
+        assert rep_w.status == falcon.HTTP_OK
+        witness_aid = rep_w.json["eid"]
+
+        # Fetch the OOBI and assert it is successful and parse the messages
+        response = client.simulate_get(f"/oobi/{witness_aid}")
+        assert response.status_code == 200
+        messages = _stream_messages(response.content)
+
+        # With the simpler `replyToOobi()` path, stored reply records come back
+        # in whatever version they were originally authored. This witness's
+        # endpoint metadata was created as v2, so the discovery replies remain
+        # v2 on the wire.
+        default_reply_versions = [version for version, ilk in messages if ilk == "rpy"]
+        assert default_reply_versions
+        assert all(version == kering.Vrsn_2_0 for version in default_reply_versions)
+
+        # Fetch the OOBI again and confirm the stored reply versions remain
+        # stable across repeated requests.
+        response = client.simulate_get(f"/oobi/{witness_aid}")
+        assert response.status_code == 200
+        messages = _stream_messages(response.content)
+
+        # The stored reply records keep their original authored v2 format
+        # across repeated OOBI fetches too.
+        v2_reply_versions = [version for version, ilk in messages if ilk == "rpy"]
+        assert v2_reply_versions
+        assert all(version == kering.Vrsn_2_0 for version in v2_reply_versions)
 
 
 def test_delete_missing_witness_returns_not_found():

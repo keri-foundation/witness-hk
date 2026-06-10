@@ -141,6 +141,8 @@ witopnet marshal submit \
 | `GET` | `/oobi/{aid}/{role}` | OOBI with role. |
 | `GET` | `/oobi/{aid}/{role}/{eid}` | OOBI with role and participant EID. |
 
+Key-event ingress continues to honor the version declared by the incoming KERI message. `GET /receipts` reconstructs receipts from the stored event it proves, `GET /oobi/...` replays KEL history and stored reply records as already authored by keripy's `replyToOobi()` flow, and `GET /ksn` emits a fixed v2 current-state reply.
+
 ## Scripts
 
 The `scripts/` directory contains shell scripts for local development and integration testing. All scripts that reference `${WITOPNET_SCRIPT_DIR}` require you to source `env.sh` first.

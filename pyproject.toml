@@ -54,3 +54,6 @@ dev = [
 
 [tool.pytest.ini_options]
 pythonpath = ["src", "."]
+
+[tool.black]
+target-version = ["py314"]

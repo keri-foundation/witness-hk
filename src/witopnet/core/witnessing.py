@@ -111,7 +111,6 @@ def setup(
         name="witopnet",
         base=base,
         temp=temp,
-        headDirPath=headDirPath,
     )
     dbDoer = BaserDoer(db)
     cf = configing.Configer(name=db.name, headDirPath=headDirPath, temp=temp)
@@ -328,6 +327,7 @@ class Witnessery(doing.DoDoer):
                 base=self.base,
                 temp=self.temp,
                 headDirPath=self.headPathDir,
+                version=kering.Vrsn_2_0,
             )
             hab = hby.habByName(wit.name)
 
@@ -386,16 +386,34 @@ class Witnessery(doing.DoDoer):
             base=self.base,
             temp=self.temp,
             headDirPath=self.headPathDir,
+            version=kering.Vrsn_2_0,
             bran=None,
         )
-        hab = hby.makeHab(name=name, transferable=False)
+        hab = hby.makeHab(
+            name=name,
+            transferable=False,
+            version=kering.Vrsn_2_0,
+            kind=eventing.Kinds.cesr,
+        )
         dt = helping.nowIso8601()
 
         msgs = bytearray()
         msgs.extend(
-            hab.makeEndRole(eid=hab.pre, role=kering.Roles.controller, stamp=dt)
+            hab.makeEndRole(
+                eid=hab.pre,
+                role=kering.Roles.controller,
+                stamp=dt,
+                version=kering.Vrsn_2_0,
+            )
         )
-        msgs.extend(hab.makeLocScheme(url=self.url, scheme=self.scheme, stamp=dt))
+        msgs.extend(
+            hab.makeLocScheme(
+                url=self.url,
+                scheme=self.scheme,
+                stamp=dt,
+                version=kering.Vrsn_2_0,
+            )
+        )
         hab.psr.parse(ims=msgs)
 
         wit = basing.Wit(name=name, cid=aid, eid=hab.pre)
@@ -496,7 +514,7 @@ class Witness(doing.DoDoer):
             tvy=tvy,
             exc=exchanger,
             rvy=rvy,
-            version=kering.Vrsn_1_0,
+            version=kering.Vrsn_2_0,
         )
 
         witStart = indirecting.WitnessStart(

@@ -16,7 +16,7 @@ from hio.help import decking
 from keri import help, kering
 from keri.app import httping
 from keri.app.httping import CESR_DESTINATION_HEADER
-from keri.core import eventing, coring, serdering, counting
+from keri.core import eventing, coring, serdering
 from keri.core.coring import Ilks
 from keri.core.eventing import reply
 from keri.help import helping
@@ -235,16 +235,20 @@ class HttpEnd:
         rep.set_header("connection", "close")
 
         cr = httping.parseCesrHttpRequest(req=req)
-        sadder = coring.Sadder(ked=cr.payload, kind=eventing.Kinds.json)
-        msg = bytearray(sadder.raw)
+
+        serder = serdering.SerderKERI(sad=cr.payload, kind=eventing.Kinds.json)
+        msg = bytearray(serder.raw)
         msg.extend(cr.attachments.encode("utf-8"))
-        pvrsn = kering.deversify(sadder.ked["v"]).pvrsn
+
+        # Use the message version
+        pvrsn = kering.deversify(serder.ked["v"]).pvrsn
 
         if (cipher := witness.getCode()) is not None:
 
             plain = witness.hab.decrypt(ser=cipher.raw)
             scode = coring.Matter(qb64b=plain).raw
-            # Check for a one-time-password in the Authroizaiton header.  If it works, parse this as "local"
+            # Check for a one-time-password in the Authorization header. If it
+            # succeeds, parse this event as locally authenticated.
             if (auth := req.get_header("Authorization")) is not None and validCode(
                 scode, auth
             ):
@@ -258,35 +262,31 @@ class HttpEnd:
                 ims=msg, local=False, version=pvrsn
             )  # This will likely go to the misfit escrow
 
-        if sadder.proto in ("ACDC",):
+        ilk = serder.ked["t"]
+        if ilk in (
+            Ilks.icp,
+            Ilks.rot,
+            Ilks.ixn,
+            Ilks.dip,
+            Ilks.drt,
+            Ilks.exn,
+            Ilks.rpy,
+        ):
             rep.set_header("Content-Type", "application/json")
             rep.status = falcon.HTTP_204
-        else:
-            ilk = sadder.ked["t"]
-            if ilk in (
-                Ilks.icp,
-                Ilks.rot,
-                Ilks.ixn,
-                Ilks.dip,
-                Ilks.drt,
-                Ilks.exn,
-                Ilks.rpy,
-            ):
+        elif ilk in (Ilks.vcp, Ilks.vrt, Ilks.iss, Ilks.rev, Ilks.bis, Ilks.brv):
+            rep.set_header("Content-Type", "application/json")
+            rep.status = falcon.HTTP_204
+        elif ilk in (Ilks.qry,):
+            if serder.ked["r"] in ("mbx",):
+                rep.set_header("Content-Type", "text/event-stream")
+                rep.status = falcon.HTTP_200
+                rep.stream = QryRpyMailboxIterable(
+                    mbx=witness.mbx, cues=self.qrycues, said=serder.said
+                )
+            else:
                 rep.set_header("Content-Type", "application/json")
                 rep.status = falcon.HTTP_204
-            elif ilk in (Ilks.vcp, Ilks.vrt, Ilks.iss, Ilks.rev, Ilks.bis, Ilks.brv):
-                rep.set_header("Content-Type", "application/json")
-                rep.status = falcon.HTTP_204
-            elif ilk in (Ilks.qry,):
-                if sadder.ked["r"] in ("mbx",):
-                    rep.set_header("Content-Type", "text/event-stream")
-                    rep.status = falcon.HTTP_200
-                    rep.stream = QryRpyMailboxIterable(
-                        mbx=witness.mbx, cues=self.qrycues, said=sadder.said
-                    )
-                else:
-                    rep.set_header("Content-Type", "application/json")
-                    rep.status = falcon.HTTP_204
 
     def on_put(self, req, rep):
         """
@@ -522,7 +522,12 @@ class ReceiptEnd:
 
         msg = bytearray(serder.raw)
         msg.extend(cr.attachments.encode("utf-8"))
+
+        # Mirror the receipted event's protocol version for the receipt body,
+        # but keep newly generated attachment framing on the modern CESR v2
+        # genus so clients do not need legacy attachment support
         pvrsn = kering.deversify(serder.ked["v"]).pvrsn
+        gvrsn = kering.Vrsn_2_0
 
         # Check for a one-time-password in the Authroizaiton header.  If it works, parse this as "local"
         if (auth := req.get_header("Authorization")) is not None and validCode(
@@ -544,7 +549,14 @@ class ReceiptEnd:
                     f"{serder.sn}: wits={wits}"
                 )
 
-            rct = witness.hab.receipt(serder)
+            # Generate a receipt whose body follows the receipted event, while
+            # its attachment framing uses the v2 CESR genus
+            rct = witness.hab.receipt(
+                serder,
+                kind=serder.kind,
+                version=pvrsn,
+                gvrsn=gvrsn,
+            )
 
             witness.parser.parseOne(bytes(rct), version=pvrsn)
 
@@ -614,25 +626,32 @@ class ReceiptEnd:
                 description=f"{witness.hab.pre} is not a valid witness for {pre} event at "
                 f"{serder.sn}, {wits}"
             )
-        pvrsn = kering.deversify(serder.ked["v"]).pvrsn
+        # Receipt lookup reconstructs the receipt from the stored event's
+        # protocol and serialization metadata so the proof matches the event it
+        # is about. We still frame any generated attachments with CESR v2
+        receipting = dict(pvrsn=serder.pvrsn, kind=serder.kind)
+        if serder.gvrsn is not None:
+            receipting["gvrsn"] = serder.gvrsn
         rserder = eventing.receipt(
             pre=pre,
             sn=serder.sn,
-            said=saidb.decode("utf-8"),
-            pvrsn=pvrsn,
-            kind=eventing.Kinds.json,
+            said=serder.said,
+            **receipting,
         )
         rct = bytearray(rserder.raw)
         if wigers := witness.hab.db.wigs.get(keys=(preb, saidb)):
-            rct.extend(
-                counting.Counter(
-                    code=counting.CtrDex_1_0.WitnessIdxSigs, count=len(wigers)
-                ).qb64b
+            rct = eventing.messagize(
+                serder=rserder,
+                wigers=wigers,
+                framed=True,
+                gvrsn=kering.Vrsn_2_0,
             )
-            for wiger in wigers:
-                rct.extend(wiger.qb64b)
 
-        rep.set_header("Content-Type", "application/json+cesr")
+        rep.content_type = (
+            "application/json+cesr"
+            if rserder.kind == kering.Kinds.json
+            else "application/cesr"
+        )
         rep.status = falcon.HTTP_200
         rep.data = bytes(rct)
 
@@ -689,7 +708,16 @@ class KeyStateEnd:
                 title="Witness receipts not found", description=msg
             )
 
-        rserder = reply(route=f"/ksn/{witness.hab.pre}", data=kever.state()._asdict())
+        # `/ksn` returns v2 CESR
+        pvrsn = kering.Vrsn_2_0
+        rserder = reply(
+            pre=witness.hab.pre,
+            route=f"/ksn/{witness.hab.pre}",
+            data=kever.state()._asdict(),
+            version=pvrsn,
+            pvrsn=pvrsn,
+            kind=eventing.Kinds.cesr,
+        )
 
         atc = witness.hab.endorse(rserder)
         rep.set_header("Content-Type", "application/cesr")

@@ -159,9 +159,7 @@ def test_aids_uses_message_protocol_version(multipart):
 def test_http_post_uses_inbound_version_across_event_types():
     """Tests `POST /` should parse real v1 and v2 bodies using each message's v field"""
 
-    cases = (
-
-    )
+    cases = ()
 
     for bob_name, bob_salt, version in cases:
         with (

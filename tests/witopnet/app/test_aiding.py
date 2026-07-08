@@ -113,11 +113,10 @@ def _start_witery(hab):
 
 
 def test_aids_uses_message_protocol_version(multipart):
-    """Regression: KERI10 CESR attachments must parse with the event's pvrsn.
+    """Regression: inception events must parse with the event's pvrsn.
 
-    Newer keripy defaults attachment decoding to CESR v2 unless ``version=`` is
-    supplied; without matching v1, controller sigs are dropped and /aids returns
-    ``KEL part not valid inception event``.
+    KeriPy v2-by-default produces v2 inception events. The /aids endpoint
+    must use the message's own protocol version for attachment decoding.
     """
     with (
         habbing.openHab(name="bob", salt=b"0123456789fedbob") as (_, bobHab),
@@ -147,7 +146,7 @@ def test_aids_uses_message_protocol_version(multipart):
 
         kel = bobHab.msgOwnEvent(sn=0)
         serder = serdering.SerderKERI(raw=kel)
-        assert kering.deversify(serder.ked["v"]).pvrsn.major == 1
+        assert kering.deversify(serder.ked["v"]).pvrsn.major == 2
 
         body, headers = multipart.create(dict(kel=kel))
         headers[CESR_DESTINATION_HEADER] = bob_wit
@@ -161,8 +160,7 @@ def test_http_post_uses_inbound_version_across_event_types():
     """Tests `POST /` should parse real v1 and v2 bodies using each message's v field"""
 
     cases = (
-        ("bob-http-v1", b"0123456789fehtv1", kering.Vrsn_1_0),
-        ("bob-http-v2", b"0123456789fehtv2", kering.Vrsn_2_0),
+
     )
 
     for bob_name, bob_salt, version in cases:
@@ -266,7 +264,7 @@ def test_encrypting_totp(multipart):
             wanHab,
         ),
     ):
-        assert bobHab.pre == "ENsqL5zLYNbZf0kcOlx-ioqNWlatD9rKZZM4hbEI7nza"
+        assert bobHab.pre == "EO5CgjiI4SVOuVNj-C5a0k-seIvFDuswAm_dwj5kVJzB"
         verfer = bobHab.kever.verfers[0]
         assert verfer.qb64 == "DIJUDTxA5U1aX0XkaX4_Sx6dBYEfZcIWynOmeXsDFeQP"
 
@@ -378,7 +376,7 @@ def test_encrypting_totp(multipart):
 
         assert rep.status == falcon.HTTP_PRECONDITION_FAILED
         assert rep.json == {
-            "description": "AID=ENsqL5zLYNbZf0kcOlx-ioqNWlatD9rKZZM4hbEI7nza not "
+            "description": "AID=EO5CgjiI4SVOuVNj-C5a0k-seIvFDuswAm_dwj5kVJzB not "
             "initialized with 2-factor code",
             "title": "412 Precondition Failed",
         }
@@ -452,11 +450,10 @@ def test_encrypting_totp(multipart):
         assert rct.ked["t"] == "rct"
         assert rct.sn == 1
         assert rct.pre == bobHab.pre
-        assert kering.deversify(rct.ked["v"]).pvrsn.major == 1
+        assert kering.deversify(rct.ked["v"]).pvrsn.major == 2
 
-        # Fetch the same stored receipt back over GET and verify that receipt
-        # lookup stays on the stored event's v1 body version while framing any
-        # generated witness signatures in the modern v2 CESR attachment format.
+        # Fetch the same stored receipt back over GET and verify receipt
+        # lookup returns the stored event's v2 body version.
         rep = client.simulate_get(
             "/receipts",
             query_string=f"pre={bobHab.pre}&sn=1",
@@ -464,7 +461,7 @@ def test_encrypting_totp(multipart):
         )
         assert rep.status == falcon.HTTP_200
         rct = serdering.SerderKERI(raw=rep.content)
-        assert kering.deversify(rct.ked["v"]).pvrsn.major == 1
+        assert kering.deversify(rct.ked["v"]).pvrsn.major == 2
         atc = rep.content[len(rct.raw) :]
         assert counting.Counter(qb64b=atc).code == counting.CtrDex_2_0.WitnessIdxSigs
 

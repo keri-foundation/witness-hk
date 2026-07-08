@@ -72,8 +72,8 @@ class OOBIEnd:
             raise falcon.HTTPNotFound(description=f"aid {aid} not found")
 
         replying = dict(
-            version=kering.Vrsn_1_0,
-            pvrsn=kering.Vrsn_1_0,
+            version=kering.Vrsn_2_0,
+            pvrsn=kering.Vrsn_2_0,
             kind=eventing.Kinds.json,
         )
 

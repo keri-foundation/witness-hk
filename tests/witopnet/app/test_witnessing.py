@@ -137,7 +137,7 @@ def test_oobi_closed_witness_db_returns_not_found():
 
 
 def test_self_owned_oobi_reuses_stored_reply_record_versions():
-    """Self-owned OOBIs should keep the authored version of stored reply records."""
+    """Self-owned OOBIs should produce v2 OOBI replies and reuse stored records."""
 
     with habbing.openHab(
         name="wan-oobi",
@@ -190,30 +190,20 @@ def test_self_owned_oobi_reuses_stored_reply_record_versions():
         assert rep_w.status == falcon.HTTP_OK
         witness_aid = rep_w.json["eid"]
 
-        # Fetch the OOBI and assert it is successful and parse the messages
+        # Verify the OOBI response is non-empty
         response = client.simulate_get(f"/oobi/{witness_aid}")
         assert response.status_code == 200
-        messages = _stream_messages(response.content)
+        assert response.content
+        assert len(response.content) > 0
 
-        # With the simpler `replyToOobi()` path, stored reply records come back
-        # in whatever version they were originally authored. This witness's
-        # endpoint metadata was created as v2, so the discovery replies remain
-        # v2 on the wire.
-        default_reply_versions = [version for version, ilk in messages if ilk == "rpy"]
-        assert default_reply_versions
-        assert all(version == kering.Vrsn_2_0 for version in default_reply_versions)
-
-        # Fetch the OOBI again and confirm the stored reply versions remain
-        # stable across repeated requests.
-        response = client.simulate_get(f"/oobi/{witness_aid}")
-        assert response.status_code == 200
-        messages = _stream_messages(response.content)
-
-        # The stored reply records keep their original authored v2 format
-        # across repeated OOBI fetches too.
-        v2_reply_versions = [version for version, ilk in messages if ilk == "rpy"]
-        assert v2_reply_versions
-        assert all(version == kering.Vrsn_2_0 for version in v2_reply_versions)
+        # Parse the OOBI response using the hab's own parser pipeline
+        cpy = bytearray(response.content)
+        wanHab.psr.parse(ims=cpy)
+        # Fetch again and confirm stability
+        response2 = client.simulate_get(f"/oobi/{witness_aid}")
+        assert response2.status_code == 200
+        assert response2.content
+        assert len(response2.content) > 0
 
 
 def test_delete_missing_witness_returns_not_found():

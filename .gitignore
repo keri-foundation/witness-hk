@@ -72,7 +72,7 @@ instance/
 docs/_build/
 
 # Generated Sphinx autosummary API stubs
-docs/api/witopnet.app*.rst
+docs/api/
 
 # Sphinx Doctor local diagnostics mirror
 .sphinx-diagnostics/

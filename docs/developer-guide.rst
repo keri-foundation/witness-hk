@@ -9,9 +9,9 @@ events.
 Environment
 -----------
 
-The current package metadata allows Python ``>=3.12.6``, but the team has already seen
-local issues on Python ``3.14``. Until that runtime is verified, use Python ``3.13`` for
-local development and documentation work.
+The current package metadata requires Python ``>=3.12.6`` (``>=3.14.0`` on main).
+Use Python ``3.14`` for development and documentation work — this matches the
+Read the Docs build configuration.
 
 Witopnet also requires ``libsodium``, which is a dependency of the ``keri`` package.
 
@@ -44,6 +44,141 @@ For development with test dependencies:
 .. code-block:: bash
 
    python -m pip install -e ".[dev]"
+
+End-to-End Walkthrough
+----------------------
+
+This section walks through the complete flow: starting a witness, provisioning
+it for a controller, and verifying it receipts events. Follow these steps in
+order. If you get stuck, see the :ref:`troubleshooting` section.
+
+Step 1: Prepare the config directory
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Create a config directory with the KERI config file structure:
+
+.. code-block:: bash
+
+   mkdir -p /tmp/witness-demo/keri/cf
+
+   cat > /tmp/witness-demo/keri/cf/witopnet.json <<'EOF'
+   {
+     "dt": "2024-01-01T00:00:00.000000+00:00",
+     "witopnet": {
+       "dt": "2024-01-01T00:00:00.000000+00:00",
+       "curls": ["http://127.0.0.1:5632/"]
+     }
+   }
+   EOF
+
+.. note::
+
+   ``--config-dir`` must point to ``/tmp/witness-demo`` (one level *above*
+   ``keri/``), not to ``/tmp/witness-demo/keri/cf/``. KERI appends
+   ``keri/cf/`` internally and looks for ``witopnet.json`` there.
+
+Step 2: Start the witness
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: bash
+
+   witopnet marshal start \
+     --config-dir /tmp/witness-demo \
+     --base witopnet \
+     --host 127.0.0.1 \
+     --http 5632 \
+     --boothost 127.0.0.1 \
+     --bootport 5631
+
+You should see log output confirming both servers started:
+
+.. code-block:: text
+
+   Starting Witness Operational Network
+   listening internally: http/5631, externally: http/5632
+
+Step 3: Verify liveness
+~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: bash
+
+   curl -i http://127.0.0.1:5631/health
+
+Expected: ``HTTP/1.1 204 No Content``
+
+Step 4: Create a controller AID
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Use ``kli`` (from keripy) to create a controller identifier:
+
+.. code-block:: bash
+
+   kli init --name controller --salt 0AControllerSalt00 --nopasscode
+   kli incept --name controller --alias controller --file /tmp/witness-demo/keri/cf/witopnet.json
+
+.. note::
+
+   The ``init`` and ``incept`` commands require ``kli`` to be installed
+   (``pip install keri``). The salt here is for demonstration only — use
+   a unique value in production.
+
+Step 5: Provision the witness for your controller
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Get your controller AID:
+
+.. code-block:: bash
+
+   kli status --name controller --alias controller
+
+Then provision the witness:
+
+.. code-block:: bash
+
+   curl -X POST http://127.0.0.1:5631/witnesses \
+     -H "Content-Type: application/json" \
+     -d '{"aid": "<your-controller-aid>"}'
+
+The response includes ``oobis`` URLs. Copy the OOBI URL for the next step.
+
+Step 6: Resolve the OOBI
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: bash
+
+   curl http://127.0.0.1:5632/oobi/<your-controller-aid>/controller
+
+This returns a CESR stream containing the witness's key event log. The
+controller uses this to discover the witness's endpoint and verify its
+identifier.
+
+Step 7: Authenticate with TOTP
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Before the witness will receipt events, the controller must register its AID
+with two-factor authentication. See the ``POST /aids`` endpoint in the
+:ref:`api-reference`.
+
+Step 8: Submit events for receipting
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Once the controller is authenticated, use ``marshal submit`` to submit events:
+
+.. code-block:: bash
+
+   witopnet marshal submit \
+     --name controller \
+     --alias controller \
+     --passcode <your-passcode>
+
+The witness will receipt each event and store the receipt for later retrieval.
+
+Step 9: Verify receipting
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: bash
+
+   curl "http://127.0.0.1:5632/receipts?pre=<controller-aid>&sn=0"
 
 Architecture
 ------------
@@ -179,6 +314,8 @@ for receipting:
 HTTP API Reference
 ------------------
 
+.. _api-reference:
+
 Boot server (``localhost:5631``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -258,6 +395,32 @@ To run a specific test file:
 
    pytest tests/witopnet/app/test_witnessing.py -v
 
+.. _troubleshooting:
+
+Troubleshooting
+---------------
+
+**"No such file or directory" when starting**
+    Ensure ``--config-dir`` points one level *above* ``keri/``, not inside
+    ``keri/cf/``. KERI looks for ``<config-dir>/keri/cf/witopnet.json``.
+
+**Port already in use**
+    Change ``--http`` or ``--bootport``. Both servers must bind to unique
+    ports. Kill any existing ``witopnet`` processes first:
+    ``pkill -f witopnet``.
+
+**"Unknown sender key state" on provision**
+    The controller AID must be incepted before provisioning. Run ``kli incept``
+    first — see Step 4 in the End-to-End Walkthrough above.
+
+**ImportError: libsodium not found**
+    Install libsodium: ``brew install libsodium`` (macOS) or
+    ``sudo apt-get install libsodium-dev`` (Ubuntu/Debian).
+
+**ModuleNotFoundError: No module named 'witopnet'**
+    Install the package in development mode: ``pip install -e .`` from the
+    repository root.
+
 Building the Docs
 -----------------
 
@@ -268,11 +431,19 @@ From the repository root:
    pip install -e .
    pip install sphinx sphinx-rtd-theme
    cd docs
-   sphinx-build -b html . _build/html
+   sphinx-build -b dirhtml . _build/html
 
 To do a clean rebuild:
 
 .. code-block:: bash
 
    rm -rf _build
+
+Next: Watcher
+-------------
+
+This witness service is paired with ``watopnet`` (``watcher-hk``), a KERI
+watcher that monitors AIDs and verifies key-event consistency across witnesses.
+See the `watcher-hk repository <https://github.com/keri-foundation/watcher-hk>`_
+for its developer guide.
    sphinx-build -b html . _build/html

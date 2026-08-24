@@ -438,6 +438,7 @@ To do a clean rebuild:
 .. code-block:: bash
 
    rm -rf _build
+   sphinx-build -b dirhtml . _build/html
 
 Next: Watcher
 -------------
@@ -446,4 +447,3 @@ This witness service is paired with ``watopnet`` (``watcher-hk``), a KERI
 watcher that monitors AIDs and verifies key-event consistency across witnesses.
 See the `watcher-hk repository <https://github.com/keri-foundation/watcher-hk>`_
 for its developer guide.
-   sphinx-build -b html . _build/html

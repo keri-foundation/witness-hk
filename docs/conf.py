@@ -8,12 +8,8 @@ import sys
 ROOT = os.path.abspath("..")
 SRC = os.path.join(ROOT, "src")
 
-# Support both src/ layout and flat layout
-for path in (SRC, ROOT):
-    if path not in sys.path:
-        sys.path.insert(0, path)
-
-import witopnet  # noqa: E402
+if SRC not in sys.path:
+    sys.path.insert(0, SRC)
 
 try:
     import sphinx_rtd_theme
@@ -25,7 +21,7 @@ except ImportError:
 project = "Witopnet"
 author = "KERI Foundation"
 copyright = "2024 - 2026, KERI Foundation and contributors"
-version = release = witopnet.__version__
+version = release = "0.0.1"
 
 # General configuration
 

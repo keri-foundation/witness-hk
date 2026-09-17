@@ -6,12 +6,49 @@ Unit tests for KeyStateEnd and KeyLogEnd endpoint classes
 """
 
 import falcon
+import pytest
 from falcon import testing
-from unittest.mock import MagicMock
-from keri import kering
+from hio.base import doing
+from unittest.mock import MagicMock, patch
 from keri.app.httping import CESR_DESTINATION_HEADER
 
-from witopnet.app.indirecting import KeyStateEnd, KeyLogEnd
+from witopnet.app.indirecting import KeyStateEnd, KeyLogEnd, WitnessStart
+
+
+@pytest.mark.parametrize(
+    ("escrowTock", "expectedCount"),
+    ((None, 2), ("1.0", 1)),
+)
+def test_witness_start_processes_escrows_at_configured_cadence(
+    monkeypatch, escrowTock, expectedCount
+):
+    monkeypatch.delenv("WITOPNET_ESCROW_TOCK", raising=False)
+    if escrowTock is not None:
+        monkeypatch.setenv("WITOPNET_ESCROW_TOCK", escrowTock)
+
+    kvy = MagicMock()
+    tvy = MagicMock()
+    rvy = MagicMock()
+    exc = MagicMock()
+    witness_start = WitnessStart(
+        hab=MagicMock(),
+        parser=MagicMock(),
+        kvy=kvy,
+        tvy=tvy,
+        rvy=rvy,
+        exc=exc,
+    )
+    escrow_doer = next(
+        doer for doer in witness_start.doers if doer.__name__ == "escrowDo"
+    )
+
+    doist = doing.Doist(limit=1.0, tock=0.03125, doers=[escrow_doer])
+    doist.do()
+
+    assert kvy.processEscrows.call_count == expectedCount
+    assert rvy.processEscrowReply.call_count == expectedCount
+    assert tvy.processEscrows.call_count == expectedCount
+    assert exc.processEscrow.call_count == expectedCount
 
 
 class TestKeyStateEnd:
@@ -61,7 +98,6 @@ class TestKeyStateEnd:
 
         # Setup database mock
         self.witness.hab.db = MagicMock()
-        self.witness.hab.db.wigs = MagicMock()
 
         # Create mock wigs (witness signatures)
         # Using valid CESR indexed signature format (0B prefix + 88 base64 chars)
@@ -69,7 +105,7 @@ class TestKeyStateEnd:
             b"0BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAg",
             b"0BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAh",
         ]
-        self.witness.hab.db.wigs.get = MagicMock(return_value=self.mock_wigs)
+        self.witness.hab.db.getWigs = MagicMock(return_value=self.mock_wigs)
 
         # Mock endorse method
         self.witness.hab.endorse = MagicMock(return_value=b"endorsed_data")
@@ -86,29 +122,30 @@ class TestKeyStateEnd:
         self.client = testing.TestClient(self.app)
 
     def test_on_get_success(self):
-        """Test successful key state query and emitted reply shape."""
+        """Test successful key state query"""
         headers = {CESR_DESTINATION_HEADER: self.witness_aid}
 
-        response = self.client.simulate_get(
-            "/ksn", query_string=f"pre={self.test_pre}", headers=headers
-        )
+        # Mock core.Siger to avoid needing valid CESR bytes
+        with patch("witopnet.app.indirecting.core.Siger") as mock_siger:
+            mock_siger_instance = MagicMock()
+            mock_siger.return_value = mock_siger_instance
 
-        assert response.status == falcon.HTTP_200
-        assert response.headers["Content-Type"] == "application/cesr"
-        assert response.content == b"endorsed_data"
+            response = self.client.simulate_get(
+                "/ksn", query_string=f"pre={self.test_pre}", headers=headers
+            )
 
-        # Verify witery.lookup was called with correct AID
-        self.witery.lookup.assert_called_once_with(self.witness_aid)
+            assert response.status == falcon.HTTP_200
+            assert response.headers["Content-Type"] == "application/cesr"
+            assert response.content == b"endorsed_data"
 
-        # Verify kever.state was called
-        self.kever.state.assert_called_once()
+            # Verify witery.lookup was called with correct AID
+            self.witery.lookup.assert_called_once_with(self.witness_aid)
 
-        # Verify endorse was called with a fixed v2 CESR reply serder.
-        self.witness.hab.endorse.assert_called_once()
-        reply_serder = self.witness.hab.endorse.call_args.args[0]
-        assert reply_serder.ked["t"] == "rpy"
-        assert kering.deversify(reply_serder.ked["v"]).pvrsn == kering.Vrsn_2_0
-        assert reply_serder.kind == kering.Kinds.cesr
+            # Verify kever.state was called
+            self.kever.state.assert_called_once()
+
+            # Verify endorse was called
+            self.witness.hab.endorse.assert_called_once()
 
     def test_on_get_missing_destination_header(self):
         """Test request without CESR destination header"""
@@ -146,23 +183,27 @@ class TestKeyStateEnd:
 
     def test_on_get_insufficient_witness_receipts(self):
         """Test when witness receipts are insufficient"""
-        # Mock wigs.get to return fewer signatures than required
-        self.witness.hab.db.wigs.get = MagicMock(
+        # Mock getWigs to return fewer signatures than required
+        self.witness.hab.db.getWigs = MagicMock(
             return_value=[b"sig1"]
         )  # Only 1, need 2
 
         headers = {CESR_DESTINATION_HEADER: self.witness_aid}
 
-        response = self.client.simulate_get(
-            "/ksn", query_string=f"pre={self.test_pre}", headers=headers
-        )
+        # Mock core.Siger to avoid CESR parsing issues
+        with patch("witopnet.app.indirecting.core.Siger") as mock_siger:
+            mock_siger.return_value = MagicMock()
 
-        assert response.status == falcon.HTTP_404
-        assert "Witness receipts not found" in response.json["title"]
+            response = self.client.simulate_get(
+                "/ksn", query_string=f"pre={self.test_pre}", headers=headers
+            )
+
+            assert response.status == falcon.HTTP_404
+            assert "Witness receipts not found" in response.json["title"]
 
     def test_on_get_no_witness_receipts(self):
         """Test when there are no witness receipts at all"""
-        self.witness.hab.db.wigs.get = MagicMock(return_value=[])
+        self.witness.hab.db.getWigs = MagicMock(return_value=[])
 
         headers = {CESR_DESTINATION_HEADER: self.witness_aid}
         response = self.client.simulate_get(

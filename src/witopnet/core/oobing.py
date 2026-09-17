@@ -7,10 +7,9 @@ witopnet.core.oobing package
 """
 
 import falcon
-from keri.core import eventing
+from keri import kering
 from keri.end import ending
 from ordered_set import OrderedSet as oset
-from keri import kering
 
 
 class OOBIEnd:
@@ -64,9 +63,9 @@ class OOBIEnd:
             raise falcon.HTTPNotFound(description=f"aid {aid} not found")
 
         kever = witness.hby.kevers[aid]
-        db = witness.hby.db
-        if not db.opened:
-            raise falcon.HTTPNotFound(description=f"witness for aid {aid} not found")
+        db = getattr(witness.hby, "db", None)
+        if db is None:
+            raise falcon.HTTPNotFound(description=f"winess for aid {aid} not found")
 
         if not db.fullyWitnessed(kever.serder):
             raise falcon.HTTPNotFound(description=f"aid {aid} not found")
@@ -82,32 +81,14 @@ class OOBIEnd:
         else:  # Not allowed to respond
             raise falcon.HTTPNotAcceptable(description="invalid OOBI request")
 
-        pvrsn = hab.kever.serder.pvrsn
-        gvrsn = pvrsn
-        replying = dict(
-            pvrsn=pvrsn,
-            gvrsn=gvrsn,
-            kind=eventing.Kinds.json,
-        )
-
         eids = []
         if eid:
             eids.append(eid)
 
-        msgs = hab.replyToOobi(
-            aid=aid,
-            role=role,
-            eids=eids,
-            **replying,
-        )
+        msgs = hab.replyToOobi(aid=aid, role=role, eids=eids)
         if not msgs and role is None:
-            msgs = hab.replyToOobi(
-                aid=aid,
-                role=kering.Roles.witness,
-                eids=eids,
-                **replying,
-            )
-            msgs.extend(hab.replay(aid, gvrsn=gvrsn))
+            msgs = hab.replyToOobi(aid=aid, role=kering.Roles.witness, eids=eids)
+            msgs.extend(hab.replay(aid))
 
         if msgs:
             rep.status = falcon.HTTP_200  # This is the default status

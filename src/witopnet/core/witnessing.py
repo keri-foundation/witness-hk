@@ -315,6 +315,36 @@ class Witnessery(doing.DoDoer):
             f"fd_headroom={headroom}"
         )
 
+    def _logFdExhaustion(self, aid):
+        """Log process file descriptor state after an FD exhaustion failure."""
+        soft = None
+        hard = None
+        try:
+            import resource
+
+            soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        except (ImportError, OSError, ValueError):
+            pass
+
+        count = None
+        for path in ("/proc/self/fd", "/dev/fd"):
+            try:
+                count = sum(1 for name in os.listdir(path) if name.isdigit())
+                break
+            except OSError:
+                continue
+
+        headroom = None
+        if count is not None and soft is not None and 0 <= soft < 2**60:
+            headroom = max(soft - count, 0)
+
+        logger.exception(
+            "Witness provisioning failed due to file descriptor exhaustion: "
+            f"controller={aid} active_witnesses={len(self.wits)} "
+            f"fd_count={count} fd_soft_limit={soft} fd_hard_limit={hard} "
+            f"fd_headroom={headroom}"
+        )
+
     def reload(self):
         """Load all witness records from the database and instantiate Witness doers.
 

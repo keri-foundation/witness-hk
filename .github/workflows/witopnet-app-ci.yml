@@ -24,15 +24,15 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install uv==0.9.18
-          uv sync --frozen --extra dev
+          uv sync --locked --extra dev
 
       - name: Check formatting with black
         run: |
-          uv run black --check src tests
+          uv run --locked --extra dev black --check src tests
 
       - name: Lint with ruff
         run: |
-          uv run ruff check .
+          uv run --locked --extra dev ruff check .
 
   test:
     runs-on: ${{ matrix.os }}
@@ -58,8 +58,8 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install uv==0.9.18
-          uv sync --frozen --extra dev
+          uv sync --locked --extra dev
 
       - name: Run tests
         run: |
-          uv run pytest tests/
+          uv run --locked --extra dev pytest tests/

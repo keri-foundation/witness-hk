@@ -9,9 +9,8 @@ events.
 Environment
 -----------
 
-The current package metadata allows Python ``>=3.12.6``, but the team has already seen
-local issues on Python ``3.14``. Until that runtime is verified, use Python ``3.13`` for
-local development and documentation work.
+The current package metadata requires Python ``>=3.14.0``. Use Python ``3.14``
+for local development.
 
 Witopnet also requires ``libsodium``, which is a dependency of the ``keri`` package.
 
@@ -20,6 +19,7 @@ Witopnet also requires ``libsodium``, which is a dependency of the ``keri`` pack
 .. code-block:: bash
 
    brew install libsodium
+   export DYLD_LIBRARY_PATH="$(brew --prefix libsodium)/lib:${DYLD_LIBRARY_PATH:-}"
 
 **Ubuntu/Debian:**
 
@@ -30,20 +30,13 @@ Witopnet also requires ``libsodium``, which is a dependency of the ``keri`` pack
 Setup
 -----
 
-From the repository root:
+Install `uv <https://docs.astral.sh/uv/getting-started/installation/>`_, then run
+from the repository root:
 
 .. code-block:: bash
 
-   python3.13 -m venv .venv
+   uv sync --locked --extra dev
    source .venv/bin/activate
-   python -m pip install --upgrade pip
-   python -m pip install -e .
-
-For development with test dependencies:
-
-.. code-block:: bash
-
-   python -m pip install -e ".[dev]"
 
 Architecture
 ------------
@@ -245,8 +238,7 @@ Testing
 
 .. code-block:: bash
 
-   pip install -e ".[dev]"
-   pytest tests/
+   uv run --locked --extra dev pytest tests/
 
 Tests are located under ``tests/witopnet/app/`` and cover the aiding, indirecting, and
 witnessing modules. The test suite uses temporary in-memory KERI keystores so no external
@@ -256,7 +248,7 @@ To run a specific test file:
 
 .. code-block:: bash
 
-   pytest tests/witopnet/app/test_witnessing.py -v
+   uv run --locked --extra dev pytest tests/witopnet/app/test_witnessing.py -v
 
 Building the Docs
 -----------------
@@ -265,8 +257,7 @@ From the repository root:
 
 .. code-block:: bash
 
-   pip install -e .
-   pip install sphinx sphinx-rtd-theme
+   uv pip install -r docs/requirements.txt
    cd docs
    sphinx-build -b html . _build/html
 

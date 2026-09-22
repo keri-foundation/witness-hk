@@ -19,6 +19,7 @@ Witopnet also requires ``libsodium``, which is a dependency of the ``keri`` pack
 .. code-block:: bash
 
    brew install libsodium
+   export DYLD_LIBRARY_PATH="$(brew --prefix libsodium)/lib:${DYLD_LIBRARY_PATH:-}"
 
 **Ubuntu/Debian:**
 
@@ -29,20 +30,13 @@ Witopnet also requires ``libsodium``, which is a dependency of the ``keri`` pack
 Setup
 -----
 
-From the repository root:
+Install `uv <https://docs.astral.sh/uv/getting-started/installation/>`_, then run
+from the repository root:
 
 .. code-block:: bash
 
-   python3.14 -m venv .venv
+   uv sync --locked --extra dev
    source .venv/bin/activate
-   python -m pip install --upgrade pip
-   python -m pip install -e .
-
-For development with test dependencies:
-
-.. code-block:: bash
-
-   python -m pip install -e ".[dev]"
 
 End-to-End Walkthrough
 ----------------------
@@ -118,8 +112,8 @@ Use ``kli`` (from keripy) to create a controller identifier:
 
 .. note::
 
-   The ``init`` and ``incept`` commands require ``kli`` to be installed
-   (``pip install keri``). The salt above is a valid 24-character qb64 salt kept
+   The setup above installs ``kli`` from the locked Keripy dependency.
+   The salt above is a valid 24-character qb64 salt kept
    for local demonstration only; use a unique value in production. Short or
    malformed salts are rejected by ``kli init``.
 
@@ -460,8 +454,7 @@ Testing
 
 .. code-block:: bash
 
-   pip install -e ".[dev]"
-   pytest tests/
+   uv run --locked --extra dev pytest tests/
 
 Tests are located under ``tests/witopnet/app/`` and cover the aiding, indirecting, and
 witnessing modules. The test suite uses temporary in-memory KERI keystores so no external
@@ -471,7 +464,7 @@ To run a specific test file:
 
 .. code-block:: bash
 
-   pytest tests/witopnet/app/test_witnessing.py -v
+   uv run --locked --extra dev pytest tests/witopnet/app/test_witnessing.py -v
 
 .. _troubleshooting:
 
@@ -496,8 +489,8 @@ Troubleshooting
     ``sudo apt-get install libsodium-dev`` (Ubuntu/Debian).
 
 **ModuleNotFoundError: No module named 'witopnet'**
-    Install the package in development mode: ``pip install -e .`` from the
-    repository root.
+    Run ``uv sync --locked --extra dev`` from the repository root, then
+    activate the environment with ``source .venv/bin/activate``.
 
 Building the Docs
 -----------------
@@ -506,8 +499,7 @@ From the repository root:
 
 .. code-block:: bash
 
-   pip install -e .
-   pip install sphinx sphinx-rtd-theme
+   uv pip install -r docs/requirements.txt
    cd docs
    sphinx-build -b dirhtml . _build/html
 

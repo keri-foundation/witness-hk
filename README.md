@@ -9,7 +9,8 @@ Witnesses are provisioned dynamically via the boot API and secured with TOTP-bas
 
 ## Requirements
 
-- Python >= 3.12.6
+- Python 3.14
+- [uv](https://docs.astral.sh/uv/getting-started/installation/) for development
 - `libsodium` (required by the `keri` package)
 
 ### Installing libsodium
@@ -17,6 +18,7 @@ Witnesses are provisioned dynamically via the boot API and secured with TOTP-bas
 **macOS:**
 ```bash
 brew install libsodium
+export DYLD_LIBRARY_PATH="$(brew --prefix libsodium)/lib:${DYLD_LIBRARY_PATH:-}"
 ```
 
 **Ubuntu/Debian:**
@@ -37,7 +39,8 @@ pip install witopnet
 ```bash
 git clone https://github.com/keri-foundation/witness-hk.git
 cd witness-hk
-pip install -e ".[dev]"
+uv sync --locked --extra dev
+source .venv/bin/activate
 ```
 
 ### Optional: install pre-commit hooks
@@ -45,15 +48,18 @@ pip install -e ".[dev]"
 The CI pipeline will run Black and Ruff and will fail if there are any format or linting issues detected. If you want local commits to run the same formatting and lint checks before commit, install pre-commit hooks for this clone:
 
 ```bash
-uv sync --extra dev
-uv run pre-commit install
+uv sync --locked --extra dev
+uv run --locked --extra dev pre-commit install
 ```
 
 Run hooks manually across the repository:
 
 ```bash
-uv run pre-commit run --all-files
+uv run --locked --extra dev pre-commit run --all-files
 ```
+
+To update dependencies, run `uv lock --upgrade-package <package>`, review the
+`uv.lock` diff, and rerun the tests. Commit lockfile changes with the update.
 
 ## Configuration
 
@@ -215,11 +221,10 @@ bash scripts/controller-multi.sh
 
 ## Testing
 
-Install the package in editable mode with dev dependencies, then run pytest:
+Run tests with the locked development dependencies:
 
 ```bash
-pip install -e ".[dev]"
-pytest tests/
+uv run --locked --extra dev pytest tests/
 ```
 
 Tests are located under `tests/witopnet/app/` and cover the aiding, indirecting, and witnessing modules. The test suite uses temporary in-memory KERI keystores so no external services are required.
@@ -227,7 +232,7 @@ Tests are located under `tests/witopnet/app/` and cover the aiding, indirecting,
 To run a specific test file:
 
 ```bash
-pytest tests/witopnet/app/test_witnessing.py -v
+uv run --locked --extra dev pytest tests/witopnet/app/test_witnessing.py -v
 ```
 
 ## License

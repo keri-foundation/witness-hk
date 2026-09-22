@@ -2,7 +2,7 @@
 # Build and publish witopnet to PyPI.
 #
 # Requirements:
-#   pip install build twine
+#   uv pip install build twine
 #
 # Usage:
 #   ./scripts/package.sh           # publish to PyPI

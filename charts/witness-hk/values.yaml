@@ -1,0 +1,36 @@
+image:
+  repository: ""
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+replicaCount: 3
+
+ports:
+  boot: 5631
+  witness: 5632
+
+# REQUIRED: base domain for per-instance external hostnames. Instance N is reachable
+# at witness-N.<baseDomain>, matching the pattern already advertised in each replica's
+# OOBI curls.
+baseDomain: ""
+
+resources: {}
+
+persistence:
+  storageClassName: ""
+  accessMode: ReadWriteOnce
+  size: 5Gi
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  tls:
+    enabled: false
+    secretName: ""   # expected to be a wildcard cert covering *.<baseDomain>
+
+serviceAccount:
+  create: false
+  name: ""

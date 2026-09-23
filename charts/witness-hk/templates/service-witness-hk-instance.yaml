@@ -1,0 +1,23 @@
+{{- range $i := until (int .Values.replicaCount) }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "witnesshk.fullname" $ }}-{{ $i }}
+  labels:
+    {{- include "witnesshk.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: witness-hk
+spec:
+  # Per-ordinal ClusterIP so Ingress can route witness-<N>.<baseDomain> to
+  # exactly pod N -- a shared/headless Service would load-balance across all
+  # replicas instead.
+  type: ClusterIP
+  selector:
+    {{- include "witnesshk.selectorLabels" $ | nindent 4 }}
+    app.kubernetes.io/component: witness-hk
+    statefulset.kubernetes.io/pod-name: {{ include "witnesshk.fullname" $ }}-{{ $i }}
+  ports:
+    - name: witness
+      port: {{ $.Values.ports.witness }}
+      targetPort: {{ $.Values.ports.witness }}
+---
+{{- end }}

@@ -1,0 +1,90 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "witnesshk.fullname" . }}
+  labels:
+    {{- include "witnesshk.labels" . | nindent 4 }}
+    app.kubernetes.io/component: witness-hk
+spec:
+  serviceName: {{ include "witnesshk.fullname" . }}-headless
+  replicas: {{ .Values.replicaCount }}
+  # Replicas are fully independent witness identities with no startup
+  # ordering dependency on each other -- no reason to pay for the default
+  # OrderedReady one-at-a-time startup.
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      {{- include "witnesshk.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: witness-hk
+  template:
+    metadata:
+      labels:
+        {{- include "witnesshk.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: witness-hk
+    spec:
+      serviceAccountName: {{ include "witnesshk.serviceAccountName" . }}
+      {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml .Values.imagePullSecrets | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: witness-hk
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["docker/scripts/witopnet.sh"]
+          env:
+            - name: WITOPNET_BASE_DOMAIN
+              value: {{ required "baseDomain is required" .Values.baseDomain | quote }}
+            - name: WITOPNET_HTTP_PORT
+              value: {{ .Values.ports.witness | quote }}
+            - name: WITOPNET_BOOT_PORT
+              value: {{ .Values.ports.boot | quote }}
+          ports:
+            - name: witness
+              containerPort: {{ .Values.ports.witness }}
+            - name: boot
+              containerPort: {{ .Values.ports.boot }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: boot
+            initialDelaySeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: boot
+            initialDelaySeconds: 20
+          volumeMounts:
+            - name: keri-data
+              mountPath: /usr/local/var/keri
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+  # Unlike castellan/rack, each replica here gets its own PVC via
+  # volumeClaimTemplates (no shared RWO PVC), so the LMDB writer-lock
+  # contention that forces castellan into `Recreate` doesn't apply across
+  # witness-hk replicas -- default RollingUpdate is safe.
+  #
+  # PVCs are named deterministically (keri-data-<statefulset-name>-<ordinal>):
+  # Retain means scaling replicas down and back up reattaches the same PVC to
+  # the same ordinal, restoring that witness's keys/KEL intact rather than
+  # starting it fresh -- a witness identity's private key material is
+  # irreplaceable, so accidental scale-down must not destroy it.
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
+  volumeClaimTemplates:
+    - metadata:
+        name: keri-data
+        labels:
+          {{- include "witnesshk.labels" . | nindent 10 }}
+      spec:
+        accessModes:
+          - {{ .Values.persistence.accessMode }}
+        {{- if .Values.persistence.storageClassName }}
+        storageClassName: {{ .Values.persistence.storageClassName }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.persistence.size }}

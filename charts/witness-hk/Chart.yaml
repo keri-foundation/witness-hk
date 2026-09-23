@@ -1,0 +1,6 @@
+apiVersion: v2
+name: witness-hk
+description: KERI witness host service (witopnet) — independently-addressable witness nodes
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

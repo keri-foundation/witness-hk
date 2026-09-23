@@ -1,0 +1,25 @@
+witness-hk has been deployed.
+
+Components:
+  - {{ include "witnesshk.fullname" . }}            StatefulSet ({{ .Values.replicaCount }} independent replicas)
+  - {{ include "witnesshk.fullname" . }}-headless   headless Service (in-cluster per-pod DNS + boot API)
+{{- if .Values.ingress.enabled }}
+  - {{ include "witnesshk.fullname" . }}            Ingress (one host rule per replica)
+{{- end }}
+
+Check the pods are ready:
+  kubectl get pods -l app.kubernetes.io/instance={{ .Release.Name }} -n {{ .Release.Namespace }}
+
+Confirm a replica's boot API is up (boot server only, ClusterIP-only, never exposed via Ingress):
+  kubectl exec {{ include "witnesshk.fullname" . }}-0 -n {{ .Release.Namespace }} -- curl -s -i localhost:{{ .Values.ports.boot }}/health
+{{- if .Values.ingress.enabled }}
+
+Each replica is externally reachable at its own hostname:
+{{- range $i := until (int .Values.replicaCount) }}
+  - https://witness-{{ $i }}.{{ $.Values.baseDomain }}/
+{{- end }}
+{{- else }}
+
+Ingress is disabled (ingress.enabled=false) -- replicas are only reachable in-cluster via the
+headless Service, e.g. {{ include "witnesshk.fullname" . }}-0.{{ include "witnesshk.fullname" . }}-headless:{{ .Values.ports.witness }}
+{{- end }}

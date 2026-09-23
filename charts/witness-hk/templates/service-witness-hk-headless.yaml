@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "witnesshk.fullname" . }}-headless
+  labels:
+    {{- include "witnesshk.labels" . | nindent 4 }}
+    app.kubernetes.io/component: witness-hk
+spec:
+  # Required by statefulset.spec.serviceName. Also gives in-cluster callers
+  # (hkapi/hkweb) direct per-pod DNS to each replica's boot API:
+  # <fullname>-N.<fullname>-headless.<namespace>.svc.cluster.local:<ports.boot>
+  clusterIP: None
+  selector:
+    {{- include "witnesshk.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: witness-hk
+  ports:
+    - name: boot
+      port: {{ .Values.ports.boot }}
+      targetPort: {{ .Values.ports.boot }}
+    - name: witness
+      port: {{ .Values.ports.witness }}
+      targetPort: {{ .Values.ports.witness }}

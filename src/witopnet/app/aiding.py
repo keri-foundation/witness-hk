@@ -50,6 +50,8 @@ class AidCollectionEnd:
         On success, returns JSON with:
             - ``totp``: the TOTP code encrypted with the *controller's* public key
             - ``oobi``: the witness OOBI URL the controller should resolve
+            - ``totps`` (multi-key AIDs only): list with the TOTP code encrypted to
+              each of the controller's public keys, in inception key order
 
         Parameters:
             req (Request): Falcon HTTP request object
@@ -169,6 +171,22 @@ class AidCollectionEnd:
         oobi = f"{endpoint}/oobi/{witness.hab.pre}/controller"
 
         body = dict(totp=cipher.qb64, oobi=oobi)
+
+        # Multisig groups: encrypt the same code to each member's key
+        if len(kever.verfers) > 1:
+            totps = []
+            for member_verfer in kever.verfers:
+                if member_verfer.code not in (
+                    coring.MtrDex.Ed25519N,
+                    coring.MtrDex.Ed25519,
+                ):
+                    raise ValueError(
+                        "Unsupported verkey derivation code = {}."
+                        "".format(member_verfer.code)
+                    )
+                member_encrypter = core.Encrypter(verkey=member_verfer.qb64b)
+                totps.append(member_encrypter.encrypt(ser=seedqb64b).qb64)
+            body["totps"] = totps
 
         rep.content_type = "application/json"
         rep.status = falcon.HTTP_200

@@ -7,6 +7,8 @@
 
 Witnesses are provisioned dynamically via the boot API and secured with TOTP-based two-factor authentication before receipting events.
 
+For provisioning, authenticating and receipting flows (including POC1 use), see [POC1-WITNESS-HK-OPERATIONS.md](POC1-WITNESS-HK-OPERATIONS.md).
+
 ## Requirements
 
 - Python >= 3.12.6
@@ -42,7 +44,7 @@ pip install -e ".[dev]"
 
 ## Configuration
 
-The witness server is configured via a KERI config file. A sample config is provided at `scripts/keri/cf/witopnet.json`:
+The witness server is configured via a KERI config file, `witopnet.json`, read from `<config-dir>/keri/cf/main/witopnet.json`. A sample config is provided at `scripts/keri/cf/main/witopnet.json`:
 
 ```json
 {
@@ -54,7 +56,7 @@ The witness server is configured via a KERI config file. A sample config is prov
 }
 ```
 
-The `curls` field sets the controller URL(s) advertised by the witness. Place your config file in a directory you will pass to `--config-dir`.
+The `curls` field sets the controller URL(s) advertised by the witness (the first entry is used for OOBIs). Place your config file at `keri/cf/main/witopnet.json` inside the directory you pass to `--config-dir`.
 
 ## Running the witness
 
@@ -72,7 +74,7 @@ witopnet marshal start \
   --bootport 5631
 ```
 
-> **Note:** `--config-dir` must point to the directory *above* `keri/cf/` — KERI appends `keri/cf/` internally when locating `witopnet.json`. `--base` must be a relative path, not absolute.
+> **Note:** `--config-dir` must point to the directory *above* `keri/` — KERI appends `keri/cf/main/` internally when locating `witopnet.json`. `--base` must be a relative path, not absolute, and applies to the keystores, not the config file.
 
 **Key flags:**
 
@@ -83,12 +85,14 @@ witopnet marshal start \
 | `--boothost` / `-bh` | `127.0.0.1` | Host the boot server listens on |
 | `--bootport` / `-bp` | `5631` | Port the boot server listens on |
 | `--base` / `-b` | `""` | Path prefix for the KERI keystore |
-| `--config-dir` / `-c` | — | Directory containing KERI config files |
-| `--config-file` | — | Config filename override |
+| `--config-dir` / `-c` | — | Directory containing `keri/cf/main/witopnet.json` |
 | `--loglevel` | `INFO` | Log level (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`) |
 | `--logfile` | — | Path to write log output |
+| `--keypath` / `--certpath` / `--cafilepath` | — | TLS private key, certificate and CA bundle, if the servers should terminate TLS themselves |
 
 Set `DEBUG_WITOPNET=1` in your environment to print full tracebacks on errors.
+
+Other environment variables: `WITOPNET_ESCROW_TOCK` (escrow processing interval in seconds, default `0.5`), `WITOPNET_DOIST_TOCK` (main loop tick, default `0.03125`) and `KERI_BASER_MAP_SIZE` (LMDB map size in bytes; set high in production).
 
 ### Submitting events to witnesses
 
@@ -98,33 +102,45 @@ The `marshal submit` subcommand submits a controller's current event to its witn
 witopnet marshal submit \
   --name <keystore-name> \
   --alias <identifier-alias> \
-  [--passcode <passcode>]
+  [--base <keystore-base>] \
+  [--passcode <21-character-passcode>] \
+  [--aeid <non-transferable-prefix>] \
+  [--config <config-dir>] \
+  [--force]
 ```
+
+`--force` re-sends receipt requests even when the current event already has a full complement of receipts.
 
 ## HTTP API
 
 ### Boot server (`localhost:5631`)
 
+The boot server has **no authentication**. Keep it bound to localhost (or cluster-internal) and never expose it externally.
+
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/witnesses` | Provision a new witness for a controller AID. Body: `{"aid": "<qb64-AID>"}`. Returns `{cid, eid, oobis}`. |
-| `DELETE` | `/witnesses/{eid}` | Delete a witness by its endpoint identifier. |
+| `POST` | `/witnesses` | Provision a new witness for a controller AID. Body: `{"aid": "<qb64-AID>"}`. Returns `{cid, eid, oobis}`. Each call creates a new witness; one process hosts any number of them. |
+| `DELETE` | `/witnesses/{eid}` | Permanently delete a witness by its endpoint identifier. Returns `204`, or `404` if unknown. |
 | `GET` | `/health` | Health check, returns `204 No Content`. |
 
 ### Witness server (`localhost:5632`)
 
+Every endpoint except `/oobi` requires a `CESR-DESTINATION` header containing the AID (`eid`) of the witness being addressed, since one process hosts many witnesses. A missing header or unknown AID is rejected (`400`, or `404` on `POST /`). A witness only serves the controller AID it was provisioned for.
+
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/` | Submit a KERI event (KEL/EXN/TEL/QRY) with CESR attachments. |
-| `PUT` | `/` | Push raw CESR bytes into the inbound stream. |
-| `POST` | `/aids` | Register a controller AID with 2FA. Body: `multipart/form-data` with `kel`, optional `delkel`, optional `secret`. Returns `{totp, oobi}`. |
-| `POST` | `/receipts` | Request a witness receipt for a KEL event. Requires `Authorization` header with TOTP. |
+| `POST` | `/` | Submit a KERI event (KEL/EXN/TEL/QRY) with CESR attachments. An optional `Authorization` header (format below) makes the event trusted; without it the event is parsed as untrusted and normally escrowed. A `qry` for `mbx` returns a server-sent-event mailbox stream. |
+| `PUT` | `/` | Accepted for compatibility (returns `204`); the body is not processed. Use `POST /`. |
+| `POST` | `/aids` | Register a controller AID for 2FA. Body: `multipart/form-data` with `kel` (inception KEL), optional `delkel` (delegator KEL), optional `secret` (TOTP seed; random if omitted). Returns `{totp, oobi}`, plus `totps` (one entry per controller key, in inception key order) when the AID has more than one key. Calling it again replaces the stored secret. |
+| `POST` | `/receipts` | Request a witness receipt for a KEL event. Requires the `Authorization` header (format below). Returns `200` with the receipt, `202` if the event is escrowed, `403` if the AID is not permitted, `412` if the AID never called `/aids`. |
 | `GET` | `/receipts` | Retrieve a stored receipt by `pre` and `sn` or `said`. |
-| `GET` | `/ksn` | Get the key state notice for a prefix. |
-| `GET` | `/log` | Replay KEL events for a prefix. |
-| `GET` | `/oobi/{aid}` | OOBI resolution endpoint. |
+| `GET` | `/ksn` | Get the key state notice for `pre` (404 until fully witnessed). |
+| `GET` | `/log` | Replay KEL events for `pre` (optional `s`, `a`, `fn`). |
+| `GET` | `/oobi/{aid}` | OOBI resolution endpoint. `aid` may be the witness or its controller (the latter only once fully witnessed). |
 | `GET` | `/oobi/{aid}/{role}` | OOBI with role. |
 | `GET` | `/oobi/{aid}/{role}/{eid}` | OOBI with role and participant EID. |
+
+**`Authorization` header format:** `<6-digit-otp>#<ISO-8601 timestamp the OTP was generated for>`. The timestamp must be within the last 10 minutes. An invalid or missing value is not an error in itself: the event is treated as untrusted, which typically shows up as a `202` or a missing receipt.
 
 ## Scripts
 
@@ -142,12 +158,12 @@ source scripts/env.sh
 
 Launches the witness and boot servers. Works for both local development (after `source scripts/env.sh`) and production deployment.
 
-**Important:** `--config-dir` must point to the directory *above* `keri/cf/` — KERI appends `keri/cf/` internally. For local dev this is the `scripts/` directory; for production it is wherever `keri/cf/witopnet.json` lives one level up.
+**Important:** `--config-dir` must point to the directory *above* `keri/` — KERI appends `keri/cf/main/` internally. For local dev this is the `scripts/` directory; for production it is the directory containing `keri/cf/main/witopnet.json`.
 
 | Variable | Default | Description |
 |---|---|---|
 | `WITOPNET_VENV` | *(unset)* | Path to a venv `activate` script. Sourced if the file exists; warns and skips if set but not found; ignored if unset (assumes caller is already in the right env). |
-| `WITOPNET_CONFIG_DIR` | `scripts/` directory | Directory containing `keri/cf/witopnet.json` (one level above `keri/cf/`). |
+| `WITOPNET_CONFIG_DIR` | `scripts/` directory | Directory containing `keri/cf/main/witopnet.json` (one level above `keri/`). |
 | `WITOPNET_BASE` | `witopnet` | Relative keystore base prefix. Must not be an absolute path. |
 | `WITOPNET_HOST` | DigitalOcean private IP, fallback `127.0.0.1` | External host the witness server binds to. Reads from the DO metadata API automatically; falls back to `127.0.0.1` if unreachable (e.g. local dev). |
 | `WITOPNET_BOOT_HOST` | `127.0.0.1` | Host the boot/management server binds to. Keep on localhost in production. |
@@ -171,7 +187,7 @@ WITOPNET_CONFIG_DIR=/opt/keri-foundation/config \
 
 ### `controller.sh`
 
-Demonstrates provisioning a single witness and rotating a controller's key event log onto it. Requires the witness server to be running and `kli` (KERI CLI) to be installed.
+Demonstrates provisioning a single witness and rotating a controller's key event log onto it. Requires the witness server to be running and `kli` (KERI CLI) to be installed. This is a local demo: it targets `localhost:5631`, uses a fixed salt and controller AID, and `kli rotate --authenticate` pauses to prompt for the TOTP code (or pass `--code <eid>:<otp>`).
 
 ```bash
 source scripts/env.sh

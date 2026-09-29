@@ -9,7 +9,7 @@
 #                        skipped with a warning if set but not found; ignored if unset.
 #                        (default: not set — assumes caller is already in the right env)
 #
-#   WITOPNET_CONFIG_DIR  Directory containing keri/cf/witopnet.json.
+#   WITOPNET_CONFIG_DIR  Directory containing keri/cf/main/witopnet.json.
 #                        (default: the scripts/ directory, so local dev works after 'source env.sh')
 #
 #   WITOPNET_BASE        Relative keystore base prefix. Must NOT be an absolute path.
@@ -47,8 +47,8 @@ if [[ -n "${WITOPNET_VENV:-}" ]]; then
 fi
 
 # --- Config directory ---
-# KERI's Configer appends keri/cf/ internally, so this should point to the directory
-# *above* keri/cf/ (e.g. scripts/, not scripts/keri/cf/).
+# KERI's Configer appends keri/cf/main/ internally, so this should point to the directory
+# *above* keri/ (e.g. scripts/, not scripts/keri/cf/main/).
 [[ -z "${WITOPNET_CONFIG_DIR:-}" ]] && ConfigDir="${SCRIPT_DIR}" || ConfigDir="${WITOPNET_CONFIG_DIR}"
 
 # --- Keystore base (must be relative) ---

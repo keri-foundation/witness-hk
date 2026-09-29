@@ -1,8 +1,9 @@
 #!/bin/bash
 # Container entrypoint for a single witness-hk (witopnet) replica running as one pod
-# in a StatefulSet. Each replica hosts exactly one witness identity, so the only thing
-# that varies per replica is the externally-advertised hostname, which is derived here
-# from the pod's ordinal rather than passed in per-replica by the chart.
+# in a StatefulSet. Each replica is an independent witopnet node that can host any number
+# of witnesses (provisioned via the boot API), so the only thing that varies per replica
+# is the externally-advertised hostname, which is derived here from the pod's ordinal
+# rather than passed in per-replica by the chart.
 #
 # Required env vars (set by the Helm chart):
 #   WITOPNET_BASE_DOMAIN   Base domain for per-instance hostnames. This pod becomes

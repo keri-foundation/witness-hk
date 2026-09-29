@@ -66,7 +66,7 @@ Configuration
 -------------
 
 The witness server is configured via a KERI config file. A sample is provided at
-``scripts/keri/cf/witopnet.json``:
+``scripts/keri/cf/main/witopnet.json``:
 
 .. code-block:: json
 
@@ -79,8 +79,8 @@ The witness server is configured via a KERI config file. A sample is provided at
    }
 
 The ``curls`` field sets the controller URL(s) advertised by the witness. Pass the
-directory containing ``keri/cf/witopnet.json`` to ``--config-dir`` — KERI appends
-``keri/cf/`` internally, so ``--config-dir`` must point one level *above* ``keri/``.
+directory containing ``keri/cf/main/witopnet.json`` to ``--config-dir`` — KERI appends
+``keri/cf/main/`` internally, so ``--config-dir`` must point one level *above* ``keri/``.
 
 Running the Witness
 -------------------
@@ -123,10 +123,7 @@ Key flags:
      - Path prefix for the KERI keystore (must be relative, not absolute)
    * - ``--config-dir`` / ``-c``
      - —
-     - Directory one level above ``keri/cf/`` containing the config file
-   * - ``--config-file``
-     - —
-     - Config filename override
+     - Directory one level above ``keri/`` containing ``keri/cf/main/witopnet.json``
    * - ``--loglevel``
      - ``INFO``
      - Log level: ``DEBUG``, ``INFO``, ``WARNING``, ``ERROR``, ``CRITICAL``
@@ -147,7 +144,8 @@ A ``204 No Content`` response confirms the boot server is alive.
 Provisioning a Witness
 ----------------------
 
-To provision a new witness for a controller AID, send a request to the boot server:
+To provision a new witness for a controller AID, send a request to the boot server. The boot
+server has no authentication, so keep it on localhost or cluster-internal networks:
 
 .. code-block:: bash
 
@@ -161,6 +159,10 @@ The response contains:
 - ``eid``: the witness AID
 - ``oobis``: list of OOBI URLs the controller should resolve
 
+Each call creates a new witness, bound to that one controller AID. A single process can host any
+number of witnesses; they share the process's hostname and are distinguished by the
+``CESR-DESTINATION`` request header (the witness ``eid``).
+
 Submitting Events
 -----------------
 
@@ -172,13 +174,22 @@ for receipting:
    witopnet marshal submit \
      --name <keystore-name> \
      --alias <identifier-alias> \
-     --passcode <passcode>
+     [--base <keystore-base>] \
+     [--passcode <21-character-passcode>] \
+     [--aeid <non-transferable-prefix>] \
+     [--config <config-dir>] \
+     [--force]
+
+``--force`` re-sends receipt requests even if the current event already has a full complement
+of receipts.
 
 HTTP API Reference
 ------------------
 
 Boot server (``localhost:5631``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The boot server is unauthenticated and must not be exposed externally.
 
 .. list-table::
    :header-rows: 1
@@ -189,16 +200,20 @@ Boot server (``localhost:5631``)
      - Description
    * - ``POST``
      - ``/witnesses``
-     - Provision a new witness. Body: ``{"aid": "<qb64-AID>"}``
+     - Provision a new witness. Body: ``{"aid": "<qb64-AID>"}``. Returns ``{cid, eid, oobis}``
    * - ``DELETE``
      - ``/witnesses/{eid}``
-     - Delete a witness by its endpoint identifier
+     - Permanently delete a witness by its endpoint identifier (``204``, or ``404`` if unknown)
    * - ``GET``
      - ``/health``
      - Liveness probe, returns ``204 No Content``
 
 Witness server (``localhost:5632``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Every endpoint except ``/oobi`` requires a ``CESR-DESTINATION`` header containing the AID
+(``eid``) of the witness being addressed. A witness only serves the controller AID it was
+provisioned for.
 
 .. list-table::
    :header-rows: 1
@@ -209,34 +224,44 @@ Witness server (``localhost:5632``)
      - Description
    * - ``POST``
      - ``/``
-     - Submit a KERI event (KEL/EXN/TEL/QRY) with CESR attachments
+     - Submit a KERI event (KEL/EXN/TEL/QRY) with CESR attachments. An optional
+       ``Authorization`` header makes the event trusted; otherwise it is parsed as untrusted
+       and normally escrowed. A ``qry`` for ``mbx`` returns a server-sent-event stream
    * - ``PUT``
      - ``/``
-     - Push raw CESR bytes into the inbound stream
+     - Accepted for compatibility (``204``); the body is not processed. Use ``POST /``
    * - ``POST``
      - ``/aids``
-     - Register a controller AID with 2FA. Body: ``multipart/form-data`` with ``kel``, optional ``delkel``, optional ``secret``
+     - Register a controller AID for 2FA. Body: ``multipart/form-data`` with ``kel``, optional
+       ``delkel``, optional ``secret``. Returns ``{totp, oobi}``, plus ``totps`` (one entry per
+       controller key, in inception key order) for multi-key AIDs. Repeat calls replace the
+       stored secret
    * - ``POST``
      - ``/receipts``
-     - Request a witness receipt. Requires ``Authorization`` header with TOTP
+     - Request a witness receipt. Requires the ``Authorization`` header. ``200`` receipt,
+       ``202`` escrowed, ``403`` AID not permitted, ``412`` AID never called ``/aids``
    * - ``GET``
      - ``/receipts``
      - Retrieve a stored receipt by ``pre`` and ``sn`` or ``said``
    * - ``GET``
      - ``/ksn``
-     - Get the key state notice for a prefix
+     - Get the key state notice for ``pre`` (``404`` until fully witnessed)
    * - ``GET``
      - ``/log``
-     - Replay KEL events for a prefix
+     - Replay KEL events for ``pre`` (optional ``s``, ``a``, ``fn``)
    * - ``GET``
      - ``/oobi/{aid}``
-     - OOBI resolution endpoint
+     - OOBI resolution endpoint (``aid`` may be the witness or its fully witnessed controller)
    * - ``GET``
      - ``/oobi/{aid}/{role}``
      - OOBI with role
    * - ``GET``
      - ``/oobi/{aid}/{role}/{eid}``
      - OOBI with role and participant EID
+
+``Authorization`` header format: ``<6-digit-otp>#<ISO-8601 timestamp the OTP was generated for>``,
+with the timestamp no more than 10 minutes old. An invalid value is not rejected outright; the
+event is treated as untrusted, which usually appears as a ``202`` or a missing receipt.
 
 Testing
 -------
